@@ -19,7 +19,7 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      const res = await post("/auth/login", { username, password });
+      const res = await post("/api/auth/login", { username, password });
       login(res.token, res.user);
       // role-based redirect priority: Admin -> Judge -> Viewer -> home
       const roles: string[] = res?.user?.roles ?? [];

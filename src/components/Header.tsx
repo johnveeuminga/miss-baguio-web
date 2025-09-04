@@ -17,33 +17,43 @@ export default function Header() {
   const logout = useAuthStore((s) => s.logout);
 
   return (
-    <header className="w-full flex items-center justify-end gap-4 p-4 bg-[var(--card)] border-b border-[var(--border)]">
-      {isAuthenticated && (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-[var(--primary)] flex items-center justify-center text-[var(--primary-foreground)] font-bold">
-              {initials(user?.fullName)}
+    <header className="w-full flex items-center justify-between p-4 bg-[var(--card)] border-b border-[var(--border)]">
+      <div className="flex items-center gap-4">
+        <img
+          src="https://miss-baguio-2025.s3.ap-southeast-1.amazonaws.com/miss-baguio-logo.png"
+          alt="Miss Baguio 2025"
+          className="h-[3.75rem] w-auto"
+        />
+      </div>
+
+      <div className="flex items-center gap-4">
+        {isAuthenticated && (
+          <>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-[var(--primary)] flex items-center justify-center text-[var(--primary-foreground)] font-bold">
+                {initials(user?.fullName)}
+              </div>
+              <div className="text-sm text-[var(--card-foreground)]">
+                {user?.fullName ?? "Guest"}
+              </div>
             </div>
-            <div className="text-sm text-[var(--card-foreground)]">
-              {user?.fullName ?? "Guest"}
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              logout();
-              window.location.href = "/login";
-            }}
-          >
-            Logout
-          </Button>
-        </>
-      )}
-      {!isAuthenticated && (
-        <Link to="/login" className={buttonVariants({ variant: "ghost" })}>
-          Login
-        </Link>
-      )}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                logout();
+                window.location.href = "/login";
+              }}
+            >
+              Logout
+            </Button>
+          </>
+        )}
+        {!isAuthenticated && (
+          <Link to="/login" className={buttonVariants({ variant: "ghost" })}>
+            Login
+          </Link>
+        )}
+      </div>
     </header>
   );
 }

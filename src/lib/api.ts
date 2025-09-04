@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+export const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 let _onUnauthorized: (() => void) | null = null;
 
@@ -49,5 +49,5 @@ export async function get(path: string, token?: string) {
 }
 
 export async function me(token?: string) {
-  return get("/me", token);
+  return get("/api/me", token);
 }
