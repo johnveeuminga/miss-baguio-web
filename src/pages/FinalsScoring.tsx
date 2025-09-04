@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/authStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { ROUNDS, CATEGORIES } from "@/lib/rounds";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import type { Candidate } from "@/types/candidate";
@@ -26,6 +27,8 @@ export default function FinalsScoring() {
     loading: sessionLoading,
     submitScore,
   } = useScoring({ roundId: 2 });
+
+  const ROUND_ID = 2;
 
   // derive candidate from session if available; otherwise optionally fetch
   useEffect(() => {
@@ -67,8 +70,8 @@ export default function FinalsScoring() {
     try {
       await submitScore(Number(value));
       qc.invalidateQueries({ queryKey: ["scores", candidate.id] });
-  // show success toast
-  toast.success(`Submitted ${value.toFixed(1)} for ${candidate.name}`);
+      // show success toast
+      toast.success(`Submitted ${value.toFixed(1)} for ${candidate.name}`);
     } catch (e) {
       setSubmitted(false);
       console.error(e);
@@ -82,12 +85,17 @@ export default function FinalsScoring() {
 
   // reset slider and submission state when candidate changes
   useEffect(() => {
-    setValue(7.0);
-    setSubmitted(false);
+    if (session) {
+      setValue(session.myScore ?? 7.0);
+      setSubmitted(session.hasSubmitted);
+    } else {
+      setValue(7.0);
+      setSubmitted(false);
+    }
     setConfirmOpen(false);
     setIsSubmitting(false);
     setSubmitError(null);
-  }, [candidate?.id]);
+  }, [candidate?.id, session]);
 
   if (loading || sessionLoading) return <div className="p-8">Loading…</div>;
 
@@ -102,6 +110,15 @@ export default function FinalsScoring() {
           Back to Home
         </Button>
       </div>
+
+      <div className="px-4 mb-2 font-bold">
+        {ROUNDS.find((r) => r.id === ROUND_ID)?.name ?? ""}
+        {" — "}
+        {session?.category?.description ??
+          CATEGORIES.find((c) => c.id === session?.categoryId)?.name ??
+          ""}
+      </div>
+
       <Card>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">

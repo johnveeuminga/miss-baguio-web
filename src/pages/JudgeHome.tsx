@@ -11,10 +11,7 @@ export default function JudgeHome() {
         <Button onClick={() => navigate("/finals-scoring")} variant="default">
           Finals
         </Button>
-        <Button
-          onClick={() => navigate("/scoring?category=top5")}
-          variant="secondary"
-        >
+        <Button onClick={() => navigate("/judge/top5")} variant="secondary">
           Top 5
         </Button>
         <Button

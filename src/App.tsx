@@ -10,6 +10,7 @@ import JudgeHome from "./pages/JudgeHome";
 import Scoring from "./pages/Scoring";
 import FinalsScoring from "./pages/FinalsScoring";
 import ViewerScoreboard from "./pages/ViewerScoreboard";
+import Top5Ranking from "./pages/Top5Ranking";
 import AdminActiveControl from "./components/AdminActiveControl";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
@@ -79,6 +80,14 @@ function AppRouter() {
             element={
               <ProtectedRoute requiredRole="Judge">
                 <FinalsScoring />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/judge/top5"
+            element={
+              <ProtectedRoute requiredRole="Judge">
+                <Top5Ranking />
               </ProtectedRoute>
             }
           />

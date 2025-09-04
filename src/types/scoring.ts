@@ -8,7 +8,15 @@ export type ScoringSessionDto = {
   startedAt?: string | null;
   // optional included entities (server may include them)
   candidate?: Candidate;
-  category?: { id: number; key?: string; name?: string } | null;
+  category?: {
+    id: number;
+    key?: string;
+    name?: string;
+    description?: string;
+  } | null;
+  hasSubmitted: boolean;
+  myScore: number;
+  myScoreUpdatedAt: string;
 };
 
 export type ScoringLockChanged = {
