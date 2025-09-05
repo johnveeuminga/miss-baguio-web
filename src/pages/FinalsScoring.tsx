@@ -6,6 +6,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { ROUNDS, CATEGORIES } from "@/lib/rounds";
+
+// derive a sized url by inserting a suffix before the file extension
+function deriveSizedUrl(url: string | undefined | null, suffix: string) {
+  if (!url) return null;
+  try {
+    const [base, query] = url.split("?");
+    const idx = base.lastIndexOf(".");
+    if (idx === -1) return url;
+    return `${base.slice(0, idx)}${suffix}${base.slice(idx)}${
+      query ? "?" + query : ""
+    }`;
+  } catch {
+    return url;
+  }
+}
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import type { Candidate } from "@/types/candidate";
@@ -112,28 +127,39 @@ export default function FinalsScoring() {
       </div>
 
       <div className="px-4 mb-2 font-bold">
-        {ROUNDS.find((r) => r.id === ROUND_ID)?.name ?? ""}
+        {ROUNDS.find((r) => r.id === ROUND_ID)?.description ?? ""}
         {" — "}
         {session?.category?.description ??
-          CATEGORIES.find((c) => c.id === session?.categoryId)?.name ??
+          CATEGORIES.find((c) => c.id === session?.categoryId)?.description ??
           ""}
       </div>
 
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+          <div className="flex flex-col md:flex-row gap-6 items-stretch">
             {/* Left column: photo with preserved 4:5 aspect ratio and name overlay */}
-            <div className="flex items-center justify-center">
+            <div className="md:flex-none flex items-center justify-center">
               <div
-                className="relative w-full max-w-[720px] rounded-md overflow-hidden bg-[color:var(--muted-fill)]"
+                className="relative w-full md:w-[375px] max-w-[500px] rounded-md overflow-hidden bg-[color:var(--muted-fill)]"
                 style={{ aspectRatio: "4 / 5" }}
               >
                 {candidate.photoUrl ? (
-                  <img
-                    src={candidate.photoUrl}
-                    alt={candidate.name}
-                    className="w-full h-full object-cover"
-                  />
+                  (() => {
+                    const small = deriveSizedUrl(
+                      candidate.photoUrl,
+                      "-300x375"
+                    );
+                    return (
+                      <img
+                        src={small || candidate.photoUrl}
+                        alt={candidate.name}
+                        width={300}
+                        height={375}
+                        decoding="async"
+                        className="w-full h-full object-cover"
+                      />
+                    );
+                  })()
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-6xl font-bold text-[var(--muted-foreground)]">
                     {(candidate.name || "U").slice(0, 2).toUpperCase()}
@@ -150,7 +176,7 @@ export default function FinalsScoring() {
             </div>
 
             {/* Right column: score centered, slider + submit at bottom */}
-            <div className="flex flex-col justify-between">
+            <div className="md:flex-1 flex flex-col justify-between">
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-8xl md:text-[6rem] font-extrabold">
                   {value.toFixed(1)}

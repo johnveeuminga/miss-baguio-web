@@ -1,9 +1,21 @@
 import { useViewerScoring } from "@/hooks/useViewerScoring";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export default function ViewerScoreboard() {
   const { session, loading, snapshot, isConnected, isLocked } =
     useViewerScoring({ roundId: 2 });
+
+  const [imgLoaded, setImgLoaded] = useState(false);
+
+  // reset loader when the candidate/photo changes
+  useEffect(() => {
+    setImgLoaded(false);
+  }, [
+    snapshot?.preferredPhotoUrl,
+    snapshot?.candidate?.photoUrl,
+    snapshot?.candidateId,
+  ]);
 
   if (loading) return <div className="p-8">Loading…</div>;
 
@@ -43,11 +55,21 @@ export default function ViewerScoreboard() {
             style={{ aspectRatio: "4 / 5" }}
           >
             {snapshot.candidate?.photoUrl ? (
-              <img
-                src={snapshot.candidate.photoUrl}
-                alt={snapshot.candidate.name}
-                className="w-full h-full object-cover"
-              />
+              <>
+                {/* skeleton while image loads */}
+                {!imgLoaded && (
+                  <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 animate-pulse" />
+                )}
+                <img
+                  src={
+                    snapshot.preferredPhotoUrl || snapshot.candidate.photoUrl
+                  }
+                  alt={snapshot.candidate.name}
+                  className="w-full h-full object-cover transition-opacity duration-500"
+                  style={{ opacity: imgLoaded ? 1 : 0 }}
+                  onLoad={() => setImgLoaded(true)}
+                />
+              </>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-6xl font-bold text-[var(--muted-foreground)]">
                 {(snapshot.candidate?.name || "U").slice(0, 2).toUpperCase()}

@@ -35,6 +35,9 @@ export type SnapshotDto = {
   candidate?: Candidate;
   category?: Category;
   round?: Round;
+  preferredPhotoUrl?: string | null;
+  fullPhotoUrl?: string | null;
+  fullPhotoReady?: boolean;
 };
 
 export function useViewerScoring(opts: { roundId: number }) {
@@ -84,7 +87,32 @@ export function useViewerScoring(opts: { roundId: number }) {
           `/api/scoring/session/${sessionId}/snapshot`,
           token ?? undefined
         )) as SnapshotDto;
-        setSnapshot(s ?? null);
+        // derive preferred small photo (append -300x375 before extension)
+        const photoUrl = s?.candidate?.photoUrl ?? null;
+
+        function deriveSized(url: string | undefined | null, suffix: string) {
+          if (!url) return null;
+          try {
+            const [base, query] = url.split("?");
+            const idx = base.lastIndexOf(".");
+            if (idx === -1) return url;
+            return `${base.slice(0, idx)}${suffix}${base.slice(idx)}${
+              query ? "?" + query : ""
+            }`;
+          } catch {
+            return url;
+          }
+        }
+
+        const small = deriveSized(photoUrl, "-300x375");
+        const full = photoUrl ?? null;
+        const out = {
+          ...(s ?? {}),
+          preferredPhotoUrl: small,
+          fullPhotoUrl: full,
+          fullPhotoReady: false,
+        } as SnapshotDto;
+        setSnapshot(out ?? null);
         return s;
       } catch (e) {
         console.debug("fetch snapshot failed", e);
@@ -115,6 +143,9 @@ export function useViewerScoring(opts: { roundId: number }) {
         const s = await fetchActive();
         if (s?.id) {
           await fetchSnapshot(s.id);
+
+          await conn.invoke("LeaveSession", sessionRef.current?.id);
+          await conn.invoke("JoinSession", s.id);
         } else {
           setSnapshot(null);
         }
