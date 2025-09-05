@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import MissBaguioResultsTable from "./MissBaguioResultsTable";
 import CombinedResultsTable from "./CombinedResultsTable";
 import Top5ResultsTable from "./Top5ResultsTable";
 import Top5CandidatesTable from "./Top5CandidatesTable";
 import SpecialAwardsTable from "./SpecialAwardsTable";
-
-// Types are defined in ./types.ts and each table component now imports what it needs.
 
 export default function ResultsCombined() {
   const [view, setView] = useState<
@@ -23,19 +28,32 @@ export default function ResultsCombined() {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">Results — Admin</h1>
         <div className="flex items-center gap-3">
-          <select
+          <Select
             value={view}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-              setView(e.target.value as "combined" | "top5" | "top5-candidates")
+            onValueChange={(v: string) =>
+              setView(
+                v as
+                  | "combined"
+                  | "top5"
+                  | "top5-candidates"
+                  | "miss-baguio"
+                  | "special-awards"
+              )
             }
-            className="border rounded px-2 py-1"
           >
-            <option value="combined">Combined (Prelim + Finals)</option>
-            <option value="top5">Top 5</option>
-            <option value="top5-candidates">Top 5 Candidates</option>
-            <option value="miss-baguio">Miss Baguio Results</option>
-            <option value="special-awards">Special Awards</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="combined">
+                Combined (Prelim + Finals)
+              </SelectItem>
+              <SelectItem value="top5">Top 5</SelectItem>
+              <SelectItem value="top5-candidates">Top 5 Candidates</SelectItem>
+              <SelectItem value="miss-baguio">Miss Baguio Results</SelectItem>
+              <SelectItem value="special-awards">Special Awards</SelectItem>
+            </SelectContent>
+          </Select>
           <Button onClick={handlePrint}>Print</Button>
         </div>
       </div>
