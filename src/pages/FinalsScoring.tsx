@@ -112,10 +112,10 @@ export default function FinalsScoring() {
       </div>
 
       <div className="px-4 mb-2 font-bold">
-        {ROUNDS.find((r) => r.id === ROUND_ID)?.name ?? ""}
+        {ROUNDS.find((r) => r.id === ROUND_ID)?.description ?? ""}
         {" — "}
         {session?.category?.description ??
-          CATEGORIES.find((c) => c.id === session?.categoryId)?.name ??
+          CATEGORIES.find((c) => c.id === session?.categoryId)?.description ??
           ""}
       </div>
 
