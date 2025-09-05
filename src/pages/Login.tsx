@@ -24,11 +24,11 @@ export default function Login() {
       // role-based redirect priority: Admin -> Judge -> Viewer -> home
       const roles: string[] = res?.user?.roles ?? [];
       if (roles.includes("Admin")) {
-        navigate("/admin");
+        navigate("/admin/active");
       } else if (roles.includes("Judge")) {
-        navigate("/judge");
+        navigate("/judge/home");
       } else if (roles.includes("Viewer")) {
-        navigate("/viewer");
+        navigate("/viewer/scoreboard");
       } else {
         navigate("/home");
       }

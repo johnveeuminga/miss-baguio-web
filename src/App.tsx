@@ -3,15 +3,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
-import Admin from "./pages/Admin";
-import Judge from "./pages/Judge";
-import Viewer from "./pages/Viewer";
+import { Navigate } from "react-router-dom";
 import JudgeHome from "./pages/JudgeHome";
 import Scoring from "./pages/Scoring";
 import FinalsScoring from "./pages/FinalsScoring";
 import ViewerScoreboard from "./pages/ViewerScoreboard";
 import Top5Ranking from "./pages/Top5Ranking";
 import AdminActiveControl from "./components/AdminActiveControl";
+import ResultsCombined from "./pages/admin/ResultsCombined";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
 import HomeRedirect from "./components/HomeRedirect";
@@ -107,6 +106,14 @@ function AppRouter() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/admin/results"
+            element={
+              <ProtectedRoute requiredRole="Admin">
+                <ResultsCombined />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/home" element={<HomeRedirect />} />
           <Route
             path="/login"
@@ -121,7 +128,8 @@ function AppRouter() {
             path="/admin"
             element={
               <ProtectedRoute requiredRole="Admin">
-                <Admin />
+                {/* Redirect admin root to admin active control */}
+                <Navigate to="/admin/active" replace />
               </ProtectedRoute>
             }
           />
@@ -129,7 +137,7 @@ function AppRouter() {
             path="/judge"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <Judge />
+                <Navigate to="/judge/home" replace />
               </ProtectedRoute>
             }
           />
@@ -137,7 +145,7 @@ function AppRouter() {
             path="/viewer"
             element={
               <ProtectedRoute requiredRole="Viewer">
-                <Viewer />
+                <Navigate to="/viewer/scoreboard" replace />
               </ProtectedRoute>
             }
           />

@@ -13,7 +13,6 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 import {
   DndContext,
   DragOverlay,
@@ -36,9 +35,17 @@ type CandidateResultDto = {
   barangay?: string | null;
 };
 
+type RankingDto = {
+  candidateId: number;
+  rankPosition: number;
+  candidateName?: string | null;
+  photoUrl?: string | null;
+  barangay?: string | null;
+};
+
 export default function Top5Ranking() {
   const token = useAuthStore((s) => s.token);
-  const navigate = useNavigate();
+  // navigate is intentionally unused in this page
   const [candidates, setCandidates] = useState<CandidateResultDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [locked] = useState(false);
@@ -49,6 +56,7 @@ export default function Top5Ranking() {
     null,
     null,
   ]);
+  const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
   const bodyOverflowRef = useRef<string | null>(null);
@@ -68,12 +76,52 @@ export default function Top5Ranking() {
     (async () => {
       setLoading(true);
       try {
-        const list = (await get(
-          "/api/scoring/top5-candidates",
-          token ?? undefined
-        )) as CandidateResultDto[];
+        const [list, ranking] = (await Promise.all([
+          get("/api/scoring/top5-candidates", token ?? undefined),
+          get("/api/scoring/rankings/me", token ?? undefined),
+        ])) as [
+          CandidateResultDto[] | null | undefined,
+          RankingDto[] | null | undefined
+        ];
+
         if (!mounted) return;
-        setCandidates(list ?? []);
+        const candidatesList = list ?? [];
+        const rankingList = ranking ?? [];
+
+        const nextSlots: (CandidateResultDto | null)[] = [
+          null,
+          null,
+          null,
+          null,
+          null,
+        ];
+        const assigned = new Set<number>();
+        for (const r of rankingList) {
+          if (!r) continue;
+          const pos = Number(r.rankPosition);
+          if (Number.isNaN(pos) || pos < 1 || pos > 5) continue;
+          const found =
+            candidatesList.find((c) => c.candidateId === r.candidateId) ?? null;
+          const cand: CandidateResultDto =
+            found ??
+            ({
+              candidateId: r.candidateId,
+              candidateName: r.candidateName ?? `#${r.candidateId}`,
+              photoUrl: r.photoUrl ?? null,
+              barangay: r.barangay ?? null,
+            } as CandidateResultDto);
+          nextSlots[pos - 1] = cand;
+          assigned.add(r.candidateId);
+        }
+
+        setIsAlreadySubmitted(rankingList.length === 5);
+
+        const available = candidatesList.filter(
+          (c) => !assigned.has(c.candidateId)
+        );
+
+        setCandidates(available);
+        setSlots(nextSlots);
       } catch (e) {
         console.error(e);
       } finally {
@@ -229,7 +277,8 @@ export default function Top5Ranking() {
     useSensor(PointerSensor)
   );
 
-  const canSubmit = slots.every((s) => s !== null) && !locked;
+  const canSubmit =
+    slots.every((s) => s !== null) && !locked && !isAlreadySubmitted;
   async function submit() {
     if (!canSubmit || !token) return false;
     const body = slots.map((s, idx) => ({
@@ -243,7 +292,8 @@ export default function Top5Ranking() {
         token
       );
       toast.success("Top 5 submitted");
-      navigate("/judge/home");
+      // mark as submitted so submit stays disabled
+      setIsAlreadySubmitted(true);
       return true;
     } catch (e) {
       console.error(e);
@@ -427,7 +477,10 @@ export default function Top5Ranking() {
 
           <div className="flex justify-end">
             <Button
-              onClick={() => setConfirmOpen(true)}
+              onClick={() => {
+                console.log("here");
+                setConfirmOpen(true);
+              }}
               disabled={!canSubmit}
               className="w-full max-w-xs"
             >
@@ -435,40 +488,35 @@ export default function Top5Ranking() {
             </Button>
           </div>
 
-          {confirmOpen && (
-            <AlertDialog>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Confirm submission</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Are you sure you want to submit the Top 5 rankings? This
-                    action cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  {submitError && (
-                    <div className="text-sm text-destructive mb-3">
-                      {submitError}
-                    </div>
-                  )}
-                  <div className="flex gap-3 justify-end">
-                    <AlertDialogCancel
-                      onClick={() => setConfirmOpen(false)}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
-                    </AlertDialogCancel>
-                    <Button
-                      onClick={handleConfirmSubmit}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? "Submitting..." : "Confirm"}
-                    </Button>
+          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm submission</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to submit the Top 5 rankings? This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                {submitError && (
+                  <div className="text-sm text-destructive mb-3">
+                    {submitError}
                   </div>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
+                )}
+                <div className="flex gap-3 justify-end">
+                  <AlertDialogCancel
+                    onClick={() => setConfirmOpen(false)}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </AlertDialogCancel>
+                  <Button onClick={handleConfirmSubmit} disabled={isSubmitting}>
+                    {isSubmitting ? "Submitting..." : "Confirm"}
+                  </Button>
+                </div>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
 
         <DragOverlay

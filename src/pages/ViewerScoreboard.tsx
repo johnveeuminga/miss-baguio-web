@@ -27,8 +27,8 @@ export default function ViewerScoreboard() {
     <div className="p-8">
       <div className="flex items-baseline justify-between mb-4">
         <h1 className="text-2xl font-bold">
-          {snapshot.round?.name || "Miss Baguio 2025"} —
-          {snapshot?.category?.name || "Unknown Category"}
+          {snapshot.round?.description || "Miss Baguio 2025"} -{" "}
+          {snapshot?.category?.description || "Unknown Category"}
         </h1>
         <div className="text-sm text-muted-foreground">
           {isConnected ? "Connected" : "Disconnected"} •{" "}
