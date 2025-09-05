@@ -56,7 +56,7 @@ export default function ViewerScoreboard() {
 
             <div className="absolute left-4 bottom-4 bg-black/60 text-white px-3 py-1 rounded-md">
               <div className="font-semibold text-lg">
-                {snapshot.candidate?.name}
+                #{snapshot.candidateId} <br /> {snapshot.candidate?.name}
               </div>
               <div className="text-sm">{snapshot.candidate?.barangay}</div>
             </div>
