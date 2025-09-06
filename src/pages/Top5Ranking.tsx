@@ -399,12 +399,16 @@ export default function Top5Ranking() {
             // If it existed in another slot, remove it from there
             if (existingIndex !== -1) next[existingIndex] = null;
 
+            // Capture whoever is currently occupying the target slot (if any)
+            const replaced = next[slotIndex];
+
             // Determine candidate object: prefer available list match, otherwise search previous slots
             const cand =
               candInAvailable ??
               (existingIndex !== -1 ? slots[existingIndex] ?? null : null);
             if (!cand) return;
 
+            // Place the new candidate into the slot
             next[slotIndex] = cand;
             setSlots(next);
 
@@ -413,6 +417,11 @@ export default function Top5Ranking() {
               setCandidates((prev) =>
                 prev.filter((p) => p.candidateId !== candId)
               );
+            }
+
+            // If we replaced an existing candidate (different from the one just placed), return them to the available list
+            if (replaced && replaced.candidateId !== cand.candidateId) {
+              setCandidates((prev) => [replaced, ...prev]);
             }
           }
         }}

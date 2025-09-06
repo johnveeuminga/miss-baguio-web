@@ -118,7 +118,7 @@ export default function FinalsScoring() {
     return <div className="p-8">Waiting for admin to start a session.</div>;
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-4xl mx-auto">
       <div className="flex mb-4">
         <Button variant="ghost" onClick={() => navigate("/judge/home")}>
           <ChevronLeft className="size-4" />
