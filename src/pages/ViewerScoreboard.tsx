@@ -1,16 +1,14 @@
 import { useViewerScoring } from "@/hooks/useViewerScoring";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export default function ViewerScoreboard() {
   const { session, loading, snapshot, isConnected, isLocked } =
     useViewerScoring({ roundId: 2 });
 
-  const [imgLoaded, setImgLoaded] = useState(false);
-
   // reset loader when the candidate/photo changes
   useEffect(() => {
-    setImgLoaded(false);
+    // setImgLoaded(false);
   }, [
     snapshot?.preferredPhotoUrl,
     snapshot?.candidate?.photoUrl,
@@ -48,47 +46,14 @@ export default function ViewerScoreboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
-        <div className="md:col-span-1 flex items-center justify-center">
-          <div
-            className="w-full max-w-[520px] rounded-md overflow-hidden bg-[color:var(--muted-fill)] relative"
-            style={{ aspectRatio: "4 / 5" }}
-          >
-            {snapshot.candidate?.photoUrl ? (
-              <>
-                {/* skeleton while image loads */}
-                {!imgLoaded && (
-                  <div className="absolute inset-0 bg-gray-200 dark:bg-gray-700 animate-pulse" />
-                )}
-                <img
-                  src={
-                    snapshot.preferredPhotoUrl || snapshot.candidate.photoUrl
-                  }
-                  alt={snapshot.candidate.name}
-                  className="w-full h-full object-cover transition-opacity duration-500"
-                  style={{ opacity: imgLoaded ? 1 : 0 }}
-                  onLoad={() => setImgLoaded(true)}
-                />
-              </>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-6xl font-bold text-[var(--muted-foreground)]">
-                {(snapshot.candidate?.name || "U").slice(0, 2).toUpperCase()}
-              </div>
-            )}
-
-            <div className="absolute left-4 bottom-4 bg-black/60 text-white px-3 py-1 rounded-md">
-              <div className="font-semibold text-lg">
-                #{snapshot.candidateId} <br /> {snapshot.candidate?.name}
-              </div>
-              <div className="text-sm">{snapshot.candidate?.barangay}</div>
-            </div>
-          </div>
-        </div>
-
+      <div className="grid grid-cols-1 gap-6 items-start">
         <div className="md:col-span-2">
           <Card>
-            <CardHeader>Scores</CardHeader>
+            <CardHeader>
+              #{snapshot?.candidateId} - {snapshot.candidate?.name}
+            </CardHeader>
             <CardContent>
+              <p>Scores:</p>
               <div className="space-y-2">
                 {snapshot.judgeScores && snapshot.judgeScores.length > 0 ? (
                   snapshot.judgeScores.map((s, i) => {
