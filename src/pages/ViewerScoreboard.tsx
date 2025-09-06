@@ -3,8 +3,7 @@ import { useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 export default function ViewerScoreboard() {
-  const { session, loading, snapshot, isConnected, isLocked } =
-    useViewerScoring({ roundId: 2 });
+  const { session, loading, snapshot } = useViewerScoring({ roundId: 2 });
 
   // reset loader when the candidate/photo changes
   useEffect(() => {
