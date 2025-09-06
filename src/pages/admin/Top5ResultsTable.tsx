@@ -37,10 +37,19 @@ export default function Top5ResultsTable() {
   const sorted = [...results].sort(
     (a, b) => (a.finalRank ?? 0) - (b.finalRank ?? 0)
   );
-  const maxJudges = Math.max(
-    0,
-    ...sorted.map((r) => r.judgeRankings?.length ?? 0)
-  );
+
+  // Build a unique list of judges found in the results and sort by judgeId
+  const judgeMap = new Map<number, string | undefined>();
+  for (const r of sorted) {
+    if (!r.judgeRankings) continue;
+    for (const jr of r.judgeRankings) {
+      if (!judgeMap.has(jr.judgeId)) judgeMap.set(jr.judgeId, jr.judgeName);
+    }
+  }
+  const judges = Array.from(judgeMap.entries())
+    .map(([judgeId, judgeName]) => ({ judgeId, judgeName }))
+    .sort((a, b) => a.judgeId - b.judgeId);
+  const maxJudges = judges.length;
 
   return (
     <div className="overflow-auto printable">
@@ -67,8 +76,8 @@ export default function Top5ResultsTable() {
             <th className="border px-2 py-1 text-left">Title</th>
             <th className="border px-2 py-1 text-left">Total</th>
             <th className="border px-2 py-1 text-left">Rank</th>
-            {Array.from({ length: maxJudges }).map((_, i) => (
-              <th key={`j-${i}`} className="border px-2 py-1">{`J${i + 1}`}</th>
+            {judges.map((j) => (
+              <th key={`j-${j.judgeId}`} className="border px-2 py-1">{`J${j.judgeId}`}</th>
             ))}
           </tr>
         </thead>
@@ -82,18 +91,17 @@ export default function Top5ResultsTable() {
                 {c.totalScore != null ? c.totalScore.toFixed(2) : "—"}
               </td>
               <td className="border px-2 py-1">{c.finalRank ?? "—"}</td>
-              {Array.from({ length: maxJudges }).map((_, idx) => (
-                <td
-                  key={`jr-${c.candidateId}-${idx}`}
-                  className="border px-2 py-1 text-right"
-                >
-                  {c.judgeRankings &&
-                  c.judgeRankings[idx] &&
-                  c.judgeRankings[idx].rankPosition != null
-                    ? String(c.judgeRankings[idx].rankPosition)
-                    : "—"}
-                </td>
-              ))}
+              {judges.map((j) => {
+                const jr = c.judgeRankings?.find((x) => x.judgeId === j.judgeId) ?? null;
+                return (
+                  <td
+                    key={`jr-${c.candidateId}-${j.judgeId}`}
+                    className="border px-2 py-1 text-right"
+                  >
+                    {jr && jr.rankPosition != null ? String(jr.rankPosition) : "—"}
+                  </td>
+                );
+              })}
             </tr>
           ))}
         </tbody>
