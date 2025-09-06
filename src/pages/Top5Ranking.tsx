@@ -493,7 +493,7 @@ export default function Top5Ranking() {
               disabled={!canSubmit}
               className="w-full max-w-xs"
             >
-              Submit Top 5
+              {isAlreadySubmitted ? "Submitted" : "Submit Top 5"}
             </Button>
           </div>
 

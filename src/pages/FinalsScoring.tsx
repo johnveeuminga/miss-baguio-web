@@ -140,8 +140,7 @@ export default function FinalsScoring() {
             {/* Left column: photo with preserved 4:5 aspect ratio and name overlay */}
             <div className="md:flex-none flex items-center justify-center">
               <div
-                className="relative w-full md:w-[375px] max-w-[500px] rounded-md overflow-hidden bg-[color:var(--muted-fill)]"
-                style={{ aspectRatio: "4 / 5" }}
+                className="relative w-full md:w-[375px] max-w-[500px] max-h-[400px] rounded-md overflow-hidden bg-[color:var(--muted-fill)]"
               >
                 {candidate.photoUrl ? (
                   (() => {
@@ -176,43 +175,38 @@ export default function FinalsScoring() {
             </div>
 
             {/* Right column: score centered, slider + submit at bottom */}
-            <div className="md:flex-1 flex flex-col justify-between">
+            <div className="md:flex-1 flex flex-col justify-between py-8">
+              <div className="px-4 flex flex-row-reverse">
+                <Button
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={submitted || isLocked}
+                >
+                  {isLocked
+                    ? "Locked"
+                    : submitted
+                    ? "Submitted"
+                    : "Submit Score"}
+                </Button>
+              </div>
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-8xl md:text-[6rem] font-extrabold">
                   {value.toFixed(1)}
                 </div>
               </div>
-
-              <div className="mt-6">
-                <div className="w-full px-4 -mt-4">
-                  <Slider
-                    value={[value]}
-                    min={7}
-                    max={10}
-                    step={0.1}
-                    onValueChange={(v) => {
-                      const n = Math.round((v[0] ?? value) * 10) / 10;
-                      setValue(n);
-                    }}
-                    disabled={submitted || isLocked}
-                    trackClassName="h-3"
-                    thumbClassName="h-6 w-6"
-                  />
-                </div>
-
-                <div className="mt-14 px-4">
-                  <Button
-                    onClick={() => setConfirmOpen(true)}
-                    disabled={submitted || isLocked}
-                    className="w-full"
-                  >
-                    {isLocked
-                      ? "Locked"
-                      : submitted
-                      ? "Submitted"
-                      : "Submit Score"}
-                  </Button>
-                </div>
+              <div className="w-full px-4">
+                <Slider
+                  value={[value]}
+                  min={7}
+                  max={10}
+                  step={0.1}
+                  onValueChange={(v) => {
+                    const n = Math.round((v[0] ?? value) * 10) / 10;
+                    setValue(n);
+                  }}
+                  disabled={submitted || isLocked}
+                  trackClassName="h-3"
+                  thumbClassName="h-6 w-6"
+                />
               </div>
             </div>
           </div>
