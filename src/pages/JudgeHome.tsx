@@ -14,12 +14,12 @@ export default function JudgeHome() {
         <Button onClick={() => navigate("/judge/top5")} variant="secondary">
           Top 5
         </Button>
-        <Button
+        {/* <Button
           onClick={() => navigate("/scoring?category=presentation")}
           variant="outline"
         >
           Presentation
-        </Button>
+        </Button> */}
       </div>
     </div>
   );

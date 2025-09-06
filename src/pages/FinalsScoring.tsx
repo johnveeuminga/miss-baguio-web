@@ -118,7 +118,7 @@ export default function FinalsScoring() {
     return <div className="p-8">Waiting for admin to start a session.</div>;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-3 max-w-4xl mx-auto">
       <div className="flex mb-4">
         <Button variant="ghost" onClick={() => navigate("/judge/home")}>
           <ChevronLeft className="size-4" />
@@ -189,7 +189,9 @@ export default function FinalsScoring() {
                 </Button>
               </div>
               <div className="flex-1 flex items-center justify-center">
-                <div className="text-8xl md:text-[6rem] font-extrabold">
+                <div className={`text-8xl md:text-[6rem] font-extrabold ${
+                  value !== 7.0 ? 'text-yellow-500' : ''
+                }`}>
                   {value.toFixed(1)}
                 </div>
               </div>

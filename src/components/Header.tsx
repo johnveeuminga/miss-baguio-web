@@ -19,11 +19,13 @@ export default function Header() {
   return (
     <header className="w-full flex items-center justify-between p-4 bg-[var(--card)] border-b border-[var(--border)]">
       <div className="flex items-center gap-4">
-        <img
-          src="https://miss-baguio-2025.s3.ap-southeast-1.amazonaws.com/miss-baguio-logo.png"
-          alt="Miss Baguio 2025"
-          className="h-[3.75rem] w-auto"
-        />
+        <Link to="/judge/home">
+          <img
+            src="https://miss-baguio-2025.s3.ap-southeast-1.amazonaws.com/miss-baguio-logo.png"
+            alt="Miss Baguio 2025"
+            className="h-[3.75rem] w-auto cursor-pointer hover:opacity-80 transition-opacity"
+          />
+        </Link>
       </div>
 
       <div className="flex items-center gap-4">
