@@ -40,20 +40,15 @@ export default function ViewerScoreboard() {
           {snapshot.round?.description || "Miss Baguio 2025"} -{" "}
           {snapshot?.category?.description || "Unknown Category"}
         </h1>
-        <div className="text-sm text-muted-foreground">
-          {isConnected ? "Connected" : "Disconnected"} •{" "}
-          {isLocked ? "Locked" : "Open"}
-        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 items-start">
         <div className="md:col-span-2">
           <Card>
-            <CardHeader>
+            <CardHeader className="font-bold">
               #{snapshot?.candidateId} - {snapshot.candidate?.name}
             </CardHeader>
             <CardContent>
-              <p>Scores:</p>
               <div className="space-y-2">
                 {snapshot.judgeScores && snapshot.judgeScores.length > 0 ? (
                   snapshot.judgeScores.map((s, i) => {
@@ -62,10 +57,11 @@ export default function ViewerScoreboard() {
                     return (
                       <div
                         key={i}
-                        className="flex justify-between items-center py-2 border-b last:border-b-0"
+                        className="flex justify-center items-center py-2 border-b last:border-b-0"
                       >
-                        <div className="font-bold">{s.judgeName}</div>
-                        <div className="text-lg">{Number(val).toFixed(1)}</div>
+                        <div className="text-lg text-center">
+                          {Number(val).toFixed(1)}
+                        </div>
                       </div>
                     );
                   })
