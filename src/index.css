@@ -45,92 +45,98 @@
 
 :root {
   --radius: 0.625rem;
-  /* Silver, Black & Gold theme based on theme.jpg */
-  /* Deep black background */
-  --background: oklch(0.08 0.01 240);
+  /* Emerald & Gold theme — matches miss-baguio's 2026 site theme
+     (src/app/globals.css). Replaces the old Silver/Black/Gold palette. */
+  /* Deep forest green background */
+  --background: oklch(0.17 0.045 152);
   /* Bright silver/white text */
   --foreground: oklch(0.95 0.005 200);
-  /* Dark charcoal card backgrounds */
-  --card: oklch(0.18 0.02 240);
+  /* Slightly lighter green card backgrounds */
+  --card: oklch(0.24 0.045 152);
   /* Silver text on cards */
   --card-foreground: oklch(0.9 0.01 200);
-  --popover: oklch(0.18 0.02 240);
+  --popover: oklch(0.24 0.045 152);
   --popover-foreground: oklch(0.9 0.01 200);
-  /* Rich gold for primary elements */
-  --primary: oklch(0.75 0.15 70);
-  /* Black text on gold buttons */
-  --primary-foreground: oklch(0.08 0.01 240);
-  /* Dark charcoal for secondary */
-  --secondary: oklch(0.25 0.02 240);
+  /* Muted brass gold for primary elements */
+  --primary: oklch(0.74 0.12 74);
+  /* Dark green text on gold buttons */
+  --primary-foreground: oklch(0.13 0.03 152);
+  /* Deeper green for secondary */
+  --secondary: oklch(0.31 0.045 152);
   /* Silver text */
   --secondary-foreground: oklch(0.85 0.01 200);
-  /* Muted charcoal background */
-  --muted: oklch(0.15 0.015 240);
+  /* Muted green background */
+  --muted: oklch(0.21 0.04 152);
   /* Muted silver text */
   --muted-foreground: oklch(0.65 0.02 200);
   /* Bright silver accent */
   --accent: oklch(0.8 0.02 200);
-  /* Black accent text */
-  --accent-foreground: oklch(0.08 0.01 240);
+  /* Dark green accent text */
+  --accent-foreground: oklch(0.13 0.03 152);
   --destructive: oklch(0.577 0.245 27.325);
-  /* Dark charcoal borders */
-  --border: oklch(0.25 0.02 240);
-  /* Black input backgrounds */
-  --input: oklch(0.12 0.015 240);
+  /* Green borders */
+  --border: oklch(0.33 0.045 152);
+  /* Dark green input backgrounds */
+  --input: oklch(0.19 0.035 152);
   /* Gold focus rings */
-  --ring: oklch(0.75 0.15 70);
-  --chart-1: oklch(0.75 0.15 70);
+  --ring: oklch(0.74 0.12 74);
+  --chart-1: oklch(0.74 0.12 74);
   --chart-2: oklch(0.8 0.02 200);
-  --chart-3: oklch(0.25 0.02 240);
+  --chart-3: oklch(0.31 0.045 152);
   --chart-4: oklch(0.85 0.01 200);
-  --chart-5: oklch(0.15 0.015 240);
-  --sidebar: oklch(0.12 0.015 240);
+  --chart-5: oklch(0.21 0.04 152);
+  --sidebar: oklch(0.19 0.035 152);
   --sidebar-foreground: oklch(0.9 0.01 200);
-  --sidebar-primary: oklch(0.75 0.15 70);
-  --sidebar-primary-foreground: oklch(0.08 0.01 240);
-  --sidebar-accent: oklch(0.25 0.02 240);
+  --sidebar-primary: oklch(0.74 0.12 74);
+  --sidebar-primary-foreground: oklch(0.13 0.03 152);
+  --sidebar-accent: oklch(0.31 0.045 152);
   --sidebar-accent-foreground: oklch(0.85 0.01 200);
-  --sidebar-border: oklch(0.25 0.02 240);
-  --sidebar-ring: oklch(0.75 0.15 70);
+  --sidebar-border: oklch(0.33 0.045 152);
+  --sidebar-ring: oklch(0.74 0.12 74);
 
-  /* Silver, Black & Gold theme accent colors */
-  --gold: oklch(0.75 0.15 70);
+  /* Emerald & Gold theme accent colors */
+  --gold: oklch(0.74 0.12 74);
   --silver: oklch(0.8 0.02 200);
+  --emerald: oklch(0.45 0.09 152);
   --black: oklch(0.08 0.01 240);
 }
 
 .dark {
-  --background: oklch(0.04 0.02 240); /* Even darker for dark mode */
+  --background: oklch(0.12 0.045 152); /* Even darker forest green */
   --foreground: oklch(1 0 0); /* Pure white text */
-  --card: oklch(0.08 0.015 240); /* Very dark cards */
+  --card: oklch(0.17 0.04 152); /* Dark green cards */
   --card-foreground: oklch(1 0 0);
-  --popover: oklch(0.08 0.015 240);
+  --popover: oklch(0.17 0.04 152);
   --popover-foreground: oklch(1 0 0);
   --primary: oklch(0.9 0.01 240); /* Brighter white for primary */
-  --primary-foreground: oklch(0.04 0.02 240);
-  --secondary: oklch(0.12 0.02 240);
+  --primary-foreground: oklch(0.12 0.045 152);
+  --secondary: oklch(0.22 0.04 152);
   --secondary-foreground: oklch(1 0 0);
-  --muted: oklch(0.1 0.015 240);
+  --muted: oklch(0.16 0.035 152);
   --muted-foreground: oklch(0.75 0.01 240);
-  --accent: oklch(0.2 0.025 240);
+  --accent: oklch(0.27 0.045 152);
   --accent-foreground: oklch(1 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.15 0.02 240);
-  --input: oklch(0.1 0.015 240);
+  --border: oklch(0.25 0.04 152);
+  --input: oklch(0.16 0.035 152);
   --ring: oklch(0.9 0.01 240);
   --chart-1: oklch(0.8 0.02 240);
   --chart-2: oklch(0.7 0.03 220);
   --chart-3: oklch(0.6 0.04 260);
   --chart-4: oklch(0.5 0.05 280);
   --chart-5: oklch(0.4 0.06 300);
-  --sidebar: oklch(0.04 0.02 240);
+  --sidebar: oklch(0.12 0.045 152);
   --sidebar-foreground: oklch(1 0 0);
   --sidebar-primary: oklch(0.9 0.01 240);
-  --sidebar-primary-foreground: oklch(0.04 0.02 240);
-  --sidebar-accent: oklch(0.12 0.02 240);
+  --sidebar-primary-foreground: oklch(0.12 0.045 152);
+  --sidebar-accent: oklch(0.22 0.04 152);
   --sidebar-accent-foreground: oklch(1 0 0);
-  --sidebar-border: oklch(0.15 0.02 240);
+  --sidebar-border: oklch(0.25 0.04 152);
   --sidebar-ring: oklch(0.9 0.01 240);
+  --gold: oklch(0.74 0.12 74);
+  --silver: oklch(0.8 0.02 200);
+  --emerald: oklch(0.45 0.09 152);
+  --black: oklch(0.08 0.01 240);
 }
 
 @layer base {

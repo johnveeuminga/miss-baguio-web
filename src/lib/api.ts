@@ -38,6 +38,22 @@ export async function post(
   return handleResponse(res);
 }
 
+export async function put(
+  path: string,
+  body: unknown,
+  token?: string
+) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(res);
+}
+
 export async function get(path: string, token?: string) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {

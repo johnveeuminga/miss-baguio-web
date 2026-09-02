@@ -13,6 +13,7 @@ import {
   AlertDialogCancel,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { LoadingView, EmptyView, ErrorView } from "@/components/ui/status-view";
 import {
   DndContext,
   DragOverlay,
@@ -43,20 +44,23 @@ type RankingDto = {
   barangay?: string | null;
 };
 
-export default function Top5Ranking() {
+// Miss Baguio 2026 "Road to Top 7" — 6 finalists by combined score + the
+// People's Choice winner (7th slot, backfilled to next-highest score if
+// she already placed in the top 6 on her own merit — see the API's
+// GetTop5Candidates/SelectTop7WithPeoplesChoice for the selection logic).
+const TOP_N = 7;
+
+export default function Top7Ranking() {
   const token = useAuthStore((s) => s.token);
   // navigate is intentionally unused in this page
   const [candidates, setCandidates] = useState<CandidateResultDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [locked] = useState(false);
-  const [slots, setSlots] = useState<(CandidateResultDto | null)[]>([
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]);
+  const [slots, setSlots] = useState<(CandidateResultDto | null)[]>(
+    Array.from({ length: TOP_N }, () => null)
+  );
   const [isAlreadySubmitted, setIsAlreadySubmitted] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
   const bodyOverflowRef = useRef<string | null>(null);
@@ -71,74 +75,77 @@ export default function Top5Ranking() {
     };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const [list, ranking] = (await Promise.all([
-          get("/api/scoring/top5-candidates", token ?? undefined),
-          get("/api/scoring/rankings/me", token ?? undefined),
-        ])) as [
-          CandidateResultDto[] | null | undefined,
-          RankingDto[] | null | undefined
-        ];
+  async function load() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [list, ranking] = (await Promise.all([
+        get("/api/scoring/top5-candidates", token ?? undefined),
+        get("/api/scoring/rankings/me", token ?? undefined),
+      ])) as [
+        CandidateResultDto[] | null | undefined,
+        RankingDto[] | null | undefined
+      ];
 
-        if (!mounted) return;
-        const candidatesList = list ?? [];
-        const rankingList = ranking ?? [];
+      const candidatesList = list ?? [];
+      const rankingList = ranking ?? [];
 
-        const nextSlots: (CandidateResultDto | null)[] = [
-          null,
-          null,
-          null,
-          null,
-          null,
-        ];
-        const assigned = new Set<number>();
-        for (const r of rankingList) {
-          if (!r) continue;
-          const pos = Number(r.rankPosition);
-          if (Number.isNaN(pos) || pos < 1 || pos > 5) continue;
-          const found =
-            candidatesList.find((c) => c.candidateId === r.candidateId) ?? null;
-          const cand: CandidateResultDto =
-            found ??
-            ({
-              candidateId: r.candidateId,
-              candidateName: r.candidateName ?? `#${r.candidateId}`,
-              photoUrl: r.photoUrl ?? null,
-              barangay: r.barangay ?? null,
-            } as CandidateResultDto);
-          nextSlots[pos - 1] = cand;
-          assigned.add(r.candidateId);
-        }
-
-        setIsAlreadySubmitted(rankingList.length === 5);
-
-        const available = candidatesList.filter(
-          (c) => !assigned.has(c.candidateId)
-        );
-
-        setCandidates(available);
-        setSlots(nextSlots);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        if (mounted) setLoading(false);
+      const nextSlots: (CandidateResultDto | null)[] = Array.from(
+        { length: TOP_N },
+        () => null
+      );
+      const assigned = new Set<number>();
+      for (const r of rankingList) {
+        if (!r) continue;
+        const pos = Number(r.rankPosition);
+        if (Number.isNaN(pos) || pos < 1 || pos > TOP_N) continue;
+        const found =
+          candidatesList.find((c) => c.candidateId === r.candidateId) ?? null;
+        const cand: CandidateResultDto =
+          found ??
+          ({
+            candidateId: r.candidateId,
+            candidateName: r.candidateName ?? `#${r.candidateId}`,
+            photoUrl: r.photoUrl ?? null,
+            barangay: r.barangay ?? null,
+          } as CandidateResultDto);
+        nextSlots[pos - 1] = cand;
+        assigned.add(r.candidateId);
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+
+      setIsAlreadySubmitted(rankingList.length === TOP_N);
+
+      const available = candidatesList.filter(
+        (c) => !assigned.has(c.candidateId)
+      );
+
+      setCandidates(available);
+      setSlots(nextSlots);
+    } catch (e) {
+      console.error(e);
+      setLoadError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // TODO(2026 Top 7): placements 4-7 aren't confirmed with the Executive
+  // Committee yet (last year's format only went to 5th/Malikhain). Mirrors
+  // the placeholder titles in the API's GetTitleForRank — update both when
+  // the real titles are confirmed.
   const AWARD_TITLES = [
-    "MISS BAGUIO 2025",
-    "MISS BAGUIO TURISMO 2025",
-    "MISS BAGUIO KALIKASAN 2025",
-    "MISS BAGUIO KULTURA 2025",
-    "MISS BAGUIO MALIKHAIN 2025",
+    "MISS BAGUIO 2026",
+    "MISS BAGUIO TURISMO 2026",
+    "MISS BAGUIO KALIKASAN 2026",
+    "4TH RUNNER-UP", // TODO: confirm real title
+    "5TH RUNNER-UP", // TODO: confirm real title
+    "6TH RUNNER-UP", // TODO: confirm real title
+    "7TH RUNNER-UP", // TODO: confirm real title
   ];
 
   function removeFromSlot(index: number) {
@@ -291,7 +298,7 @@ export default function Top5Ranking() {
         body as unknown as Record<string, unknown>,
         token
       );
-      toast.success("Top 5 submitted");
+      toast.success("Top 7 submitted");
       // mark as submitted so submit stays disabled
       setIsAlreadySubmitted(true);
       return true;
@@ -325,15 +332,28 @@ export default function Top5Ranking() {
   }
 
   // Keep candidate strip at a fixed number of visible columns
-  const DISPLAY_COLUMNS = 5;
+  const DISPLAY_COLUMNS = TOP_N;
   const displayedCandidates = Array.from({ length: DISPLAY_COLUMNS }).map(
     (_, i) => candidates[i] ?? null
   );
 
+  if (loadError) {
+    return (
+      <div className="p-8">
+        <h1 className="text-2xl font-bold mb-4">Top 7 Ranking</h1>
+        <ErrorView
+          title="Couldn't load Top 7 candidates"
+          description={loadError}
+          onRetry={load}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Top 5 Ranking</h1>
+        <h1 className="text-2xl font-bold">Top 7 Ranking</h1>
         <div className="text-sm text-muted-foreground">
           {locked ? "Locked" : "Open"}
         </div>
@@ -441,7 +461,7 @@ export default function Top5Ranking() {
         }}
       >
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             {slots.map((_, i) => (
               <div key={i} className="border-2 rounded-md bg-card p-4">
                 <div className="mb-2">
@@ -459,11 +479,18 @@ export default function Top5Ranking() {
             <CardContent className="h-full overflow-hidden ">
               <div className="overflow-x-auto py-2">
                 {loading ? (
-                  <div>Loading…</div>
+                  <LoadingView label="Loading candidates…" />
                 ) : candidates.length === 0 ? (
-                  <div>No candidates</div>
+                  <EmptyView
+                    title="No candidates left to place"
+                    description={
+                      isAlreadySubmitted
+                        ? "You've already submitted your Top 7 ranking."
+                        : "All candidates have been placed into a slot above."
+                    }
+                  />
                 ) : (
-                  <div className="grid grid-cols-5 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
                     {displayedCandidates.map((c, idx) => (
                       <div
                         key={c ? `cand-${c.candidateId}` : `empty-${idx}`}
@@ -486,14 +513,11 @@ export default function Top5Ranking() {
 
           <div className="flex justify-end">
             <Button
-              onClick={() => {
-                console.log("here");
-                setConfirmOpen(true);
-              }}
+              onClick={() => setConfirmOpen(true)}
               disabled={!canSubmit}
               className="w-full max-w-xs"
             >
-              {isAlreadySubmitted ? "Submitted" : "Submit Top 5"}
+              {isAlreadySubmitted ? "Submitted" : "Submit Top 7"}
             </Button>
           </div>
 
@@ -502,7 +526,7 @@ export default function Top5Ranking() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Confirm submission</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to submit the Top 5 rankings? This
+                  Are you sure you want to submit the Top 7 rankings? This
                   action cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>

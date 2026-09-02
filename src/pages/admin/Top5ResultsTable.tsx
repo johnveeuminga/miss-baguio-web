@@ -31,8 +31,8 @@ export default function Top5ResultsTable() {
     };
   }, [token]);
 
-  if (loading) return <div>Loading Top 5…</div>;
-  if (!loading && results.length === 0) return <div>No Top 5 results</div>;
+  if (loading) return <div>Loading Top 7…</div>;
+  if (!loading && results.length === 0) return <div>No Top 7 results</div>;
 
   const sorted = [...results].sort(
     (a, b) => (a.finalRank ?? 0) - (b.finalRank ?? 0)
@@ -76,8 +76,20 @@ export default function Top5ResultsTable() {
             <th className="border px-2 py-1 text-left">Title</th>
             <th className="border px-2 py-1 text-left">Total</th>
             <th className="border px-2 py-1 text-left">Rank</th>
-            {judges.map((j) => (
-              <th key={`j-${j.judgeId}`} className="border px-2 py-1">{`J${j.judgeId}`}</th>
+            {judges.map((j, i) => (
+              <th
+                key={`j-${j.judgeId}`}
+                className="border px-2 py-1"
+                title={j.judgeName}
+              >
+                {/* Was `J${j.judgeId}` — the raw database id, which starts
+                    at 3 (ids 1-2 are Admin/Viewer), so this showed
+                    "J3, J4, ... J11" instead of "J1, J2, ... J9". Judges
+                    are already sorted by id here, so a 1-based position in
+                    that order gives the display number judges actually
+                    expect. */}
+                {`J${i + 1}`}
+              </th>
             ))}
           </tr>
         </thead>
