@@ -31,9 +31,9 @@ export default function Top5CandidatesTable() {
     };
   }, [token]);
 
-  if (loading) return <div>Loading Top 5 candidates…</div>;
+  if (loading) return <div>Loading Top 7 candidates…</div>;
   if (!loading && candidates.length === 0)
-    return <div>No Top 5 candidates</div>;
+    return <div>No Top 7 candidates</div>;
 
   return (
     <div className="overflow-auto printable">

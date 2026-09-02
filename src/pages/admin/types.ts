@@ -12,10 +12,13 @@ export type CandidateCombinedResultDto = {
   candidateName: string;
   barangay?: string | null;
   photoUrl?: string | null;
-  preliminaryCategories: PerCategoryScoreDto[];
-  preliminaryWeightedTotal?: number | null;
-  finalsCategories: PerCategoryScoreDto[];
-  finalsWeightedTotal?: number | null;
+  // Field names match the backend's CandidateMorningCoronationDto — was
+  // Preliminary*/Finals* before the 2026 "Road to Top 7" rename (see
+  // DTOs/CandidateDtos.cs), kept in sync here.
+  morningCategories: PerCategoryScoreDto[];
+  morningWeightedTotal?: number | null;
+  coronationCategories: PerCategoryScoreDto[];
+  coronationWeightedTotal?: number | null;
   combinedTotal?: number | null;
   finalRank?: number | null;
 };

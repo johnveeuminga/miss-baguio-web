@@ -1,76 +1,101 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Link } from "react-router-dom";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
+import { ChevronLeft, Printer } from "lucide-react";
 import MissBaguioResultsTable from "./MissBaguioResultsTable";
 import CombinedResultsTable from "./CombinedResultsTable";
 import Top5ResultsTable from "./Top5ResultsTable";
 import Top5CandidatesTable from "./Top5CandidatesTable";
 import SpecialAwardsTable from "./SpecialAwardsTable";
 
+// 2026 "Road to Top 7" naming — these views used to be labeled for the old
+// Preliminary/Finals + Top 5 format. The underlying endpoints/data are
+// already on the new model (verified: /api/admin/results/prelims-finals
+// now returns Morning/Coronation category names, /api/admin/results/top5
+// returns 7 finalists), the labels just hadn't been updated to match.
+const VIEWS = [
+  {
+    id: "combined",
+    label: "All Scores",
+    description: "Every candidate's Morning + Coronation Night scores.",
+  },
+  {
+    id: "top5",
+    label: "Top 7 — Per-Judge Ranks",
+    description: "Final placements with each judge's individual rank.",
+  },
+  {
+    id: "top5-candidates",
+    label: "Top 7 Finalists",
+    description: "The 7 finalists, unordered.",
+  },
+  {
+    id: "miss-baguio",
+    label: "Final Titles",
+    description: "Miss Baguio, runners-up, and the rest of Top 7.",
+  },
+  {
+    id: "special-awards",
+    label: "Special Awards",
+    description: "Best in Evening Wear, Swimwear, Creative Costume, People's Choice.",
+  },
+] as const;
+
+type ViewId = (typeof VIEWS)[number]["id"];
+
 export default function ResultsCombined() {
-  const [view, setView] = useState<
-    "combined" | "top5" | "top5-candidates" | "miss-baguio" | "special-awards"
-  >("combined");
+  const [view, setView] = useState<ViewId>("combined");
+  const activeView = VIEWS.find((v) => v.id === view)!;
 
   function handlePrint() {
     window.print();
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">Results — Admin</h1>
-        <div className="flex items-center gap-3">
-          <Select
-            value={view}
-            onValueChange={(v: string) =>
-              setView(
-                v as
-                  | "combined"
-                  | "top5"
-                  | "top5-candidates"
-                  | "miss-baguio"
-                  | "special-awards"
-              )
+    <div className="p-6 max-w-6xl mx-auto space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link
+            to="/admin/active"
+            className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground inline-flex items-center gap-1 mb-1"
+          >
+            <ChevronLeft className="size-3" /> Back to session control
+          </Link>
+          <h1 className="text-xl font-bold">Results</h1>
+        </div>
+        <Button onClick={handlePrint} variant="outline" size="sm">
+          <Printer className="size-4" /> Print
+        </Button>
+      </div>
+
+      {/* Tabs instead of a dropdown — with only 5 views, a row of buttons
+          is faster to scan and switch between than opening a select each
+          time, and shows all the options at once instead of hiding them
+          behind a closed trigger. */}
+      <div className="flex flex-wrap gap-1.5">
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            onClick={() => setView(v.id)}
+            className={
+              "px-3 py-1.5 rounded-md text-sm font-medium transition-colors " +
+              (view === v.id
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:text-foreground")
             }
           >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="combined">
-                Combined (Prelim + Finals)
-              </SelectItem>
-              <SelectItem value="top5">Top 5</SelectItem>
-              <SelectItem value="top5-candidates">Top 5 Candidates</SelectItem>
-              <SelectItem value="miss-baguio">Miss Baguio Results</SelectItem>
-              <SelectItem value="special-awards">Special Awards</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button onClick={handlePrint}>Print</Button>
-        </div>
+            {v.label}
+          </button>
+        ))}
       </div>
 
       <Card>
-        <CardHeader className="font-bold">
-          {view === "combined"
-            ? "Combined Results"
-            : view === "top5"
-            ? "Top 5 Results"
-            : view === "miss-baguio"
-            ? "Miss Baguio Results"
-            : view === "special-awards"
-            ? "Special Awards"
-            : "Top 5 Candidates"}
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
+          <p className="text-xs text-muted-foreground mb-3">
+            {activeView.description}
+          </p>
           {view === "combined" ? (
             <CombinedResultsTable />
           ) : view === "top5" ? (

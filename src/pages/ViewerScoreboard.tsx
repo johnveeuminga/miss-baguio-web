@@ -1,26 +1,20 @@
 import { useViewerScoring } from "@/hooks/useViewerScoring";
-import { useEffect } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { LoadingView, EmptyView } from "@/components/ui/status-view";
 
 export default function ViewerScoreboard() {
   const { session, loading, snapshot } = useViewerScoring({ roundId: 2 });
 
-  // reset loader when the candidate/photo changes
-  useEffect(() => {
-    // setImgLoaded(false);
-  }, [
-    snapshot?.preferredPhotoUrl,
-    snapshot?.candidate?.photoUrl,
-    snapshot?.candidateId,
-  ]);
-
-  if (loading) return <div className="p-8">Loading…</div>;
+  if (loading) return <LoadingView label="Loading scoreboard…" className="p-8" />;
 
   if (!session)
     return (
       <div className="p-8">
         <h1 className="text-2xl font-bold mb-4">Viewer Scoreboard</h1>
-        <div>Waiting for admin to start a session.</div>
+        <EmptyView
+          title="Waiting for admin"
+          description="No active session yet. Scores will appear here as soon as one starts."
+        />
       </div>
     );
 
@@ -28,7 +22,7 @@ export default function ViewerScoreboard() {
     return (
       <div className="p-8">
         <h1 className="text-2xl font-bold mb-4">Viewer Scoreboard</h1>
-        <div>No snapshot available for this session.</div>
+        <EmptyView title="No snapshot available for this session" />
       </div>
     );
 

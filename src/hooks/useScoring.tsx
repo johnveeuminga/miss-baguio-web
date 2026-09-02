@@ -121,7 +121,7 @@ export function useScoring({
     // include handlers in deps to avoid stale closures; do NOT include session itself
   }, [fetchActive, token, onActiveSession, onRealtimeScore]);
 
-  async function submitScore(scoreValue: number) {
+  async function submitScore(scoreValue: number, isCorrection = false) {
     if (!token) throw new Error("Not authenticated");
     if (!session) throw new Error("No active session");
     if (isLocked) throw new Error("Session is locked");
@@ -130,6 +130,7 @@ export function useScoring({
       categoryId: session.categoryId,
       scoreValue,
       scoringSessionId: session.id,
+      isCorrection,
     };
     try {
       const res = await post(
