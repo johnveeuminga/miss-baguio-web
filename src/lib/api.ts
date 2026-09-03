@@ -54,6 +54,17 @@ export async function put(
   return handleResponse(res);
 }
 
+export async function del(path: string, token?: string) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "DELETE",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "Content-Type": "application/json",
+    },
+  });
+  return handleResponse(res);
+}
+
 export async function get(path: string, token?: string) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {

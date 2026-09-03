@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { get, post, put } from "@/lib/api";
+import { get, post, put, del } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
 import { useScoringControl } from "@/hooks/useScoringControl";
@@ -55,6 +55,25 @@ type CandidateScoreDto = {
   judgesSubmitted?: number | null;
 };
 
+type AssignedJudgeDto = {
+  judgeId: number;
+  judgeName: string;
+  claimedAt: string;
+};
+
+type ScoringProgressCategoryDto = {
+  categoryId: number;
+  expectedJudgeCount: number;
+  isCustomJudgeCount: boolean;
+  assignedJudges: AssignedJudgeDto[] | null;
+  openSlots: number | null;
+};
+
+type ScoringProgressRoundDto = {
+  roundId: number;
+  categories: ScoringProgressCategoryDto[];
+};
+
 /**
  * The actual admin control for running scoring live — starts/stops/locks a
  * session against the real endpoints (POST /api/scoring/session/start,
@@ -96,6 +115,59 @@ export default function AdminActiveControl() {
   const [editingJudgeCount, setEditingJudgeCount] = useState(false);
   const [savingJudgeCount, setSavingJudgeCount] = useState(false);
   const skipNextJudgeCountBlurSave = useRef(false);
+
+  const [assignedJudges, setAssignedJudges] = useState<AssignedJudgeDto[]>([]);
+  const [showAssignedJudges, setShowAssignedJudges] = useState(false);
+  const [releasingSlotFor, setReleasingSlotFor] = useState<number | null>(null);
+
+  const loadAssignedJudges = useCallback(
+    async (catId: number) => {
+      try {
+        const progress = (await get(
+          "/api/admin/scoring-progress",
+          token ?? undefined
+        )) as ScoringProgressRoundDto[];
+        const category = progress
+          .flatMap((r) => r.categories)
+          .find((c) => c.categoryId === catId);
+        setAssignedJudges(category?.assignedJudges ?? []);
+      } catch {
+        // Non-critical — the judges list is just a convenience view; a
+        // failed fetch shouldn't block the rest of the card.
+        setAssignedJudges([]);
+      }
+    },
+    [token]
+  );
+
+  // Refetch whenever the selected category (or its cap) changes, so the
+  // occupant list never shows a stale category's judges.
+  useEffect(() => {
+    if (categoryId != null && selectedCategory?.expectedJudgeCount != null) {
+      loadAssignedJudges(categoryId);
+    } else {
+      setAssignedJudges([]);
+      setShowAssignedJudges(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, selectedCategory?.expectedJudgeCount]);
+
+  async function releaseJudgeSlot(judgeId: number) {
+    if (!selectedCategory) return;
+    setReleasingSlotFor(judgeId);
+    try {
+      await del(
+        `/api/admin/categories/${selectedCategory.id}/judge-slots/${judgeId}`,
+        token ?? undefined
+      );
+      toast.success(`Freed that judge's seat in ${selectedCategory.description}.`);
+      await loadAssignedJudges(selectedCategory.id);
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to release the judge's seat"));
+    } finally {
+      setReleasingSlotFor(null);
+    }
+  }
 
   // Switching category (or round) mid-edit should never save the typed
   // value against a now-different category — bail out of edit mode instead.
@@ -621,8 +693,10 @@ export default function AdminActiveControl() {
               {/* Per-category judge count override — for rounds like
                   Preliminaries where the panel isn't the full judge roster
                   and can differ category to category (e.g. Q&A judged by 3,
-                  Costume by 5). Purely a display input for the "N/X judges"
-                  progress elsewhere; doesn't gate who can actually score. */}
+                  Costume by 5). This IS enforced server-side — once this many
+                  distinct judges have scored the category, anyone else is
+                  refused. Below it, an occupant list (once someone's scored)
+                  shows exactly who holds a seat, with a way to free one. */}
               {selectedCategory &&
                 (editingJudgeCount ? (
                   <div className="flex h-11 items-center gap-1 rounded-md border border-border bg-muted px-2">
@@ -669,6 +743,20 @@ export default function AdminActiveControl() {
                       : `${totalJudges ?? "?"} judges (default)`}
                   </button>
                 ))}
+
+              {selectedCategory?.expectedJudgeCount != null && (
+                <button
+                  type="button"
+                  onClick={() => setShowAssignedJudges((v) => !v)}
+                  className="flex h-11 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+                  title="See which judges hold a seat in this category"
+                >
+                  {assignedJudges.length}/{selectedCategory.expectedJudgeCount} seated
+                  <ChevronRight
+                    className={`size-3.5 transition-transform ${showAssignedJudges ? "rotate-90" : ""}`}
+                  />
+                </button>
+              )}
               <Select
                 value={candidateId != null ? String(candidateId) : undefined}
                 onValueChange={(v) => setCandidateId(Number(v))}
@@ -723,6 +811,35 @@ export default function AdminActiveControl() {
                 Go Live
               </Button>
             </div>
+
+            {showAssignedJudges && selectedCategory?.expectedJudgeCount != null && (
+              <div className="mt-2 rounded-md border border-border bg-muted/50 p-2 text-sm">
+                {assignedJudges.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    No seats claimed yet — the first {selectedCategory.expectedJudgeCount}{" "}
+                    judge{selectedCategory.expectedJudgeCount === 1 ? "" : "s"} to submit a
+                    score here will take them.
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {assignedJudges.map((j) => (
+                      <li key={j.judgeId} className="flex items-center justify-between gap-2">
+                        <span>{j.judgeName}</span>
+                        <button
+                          type="button"
+                          onClick={() => releaseJudgeSlot(j.judgeId)}
+                          disabled={releasingSlotFor === j.judgeId}
+                          className="text-xs text-destructive hover:underline disabled:opacity-50"
+                          title="Free this seat — also removes their scores in this category"
+                        >
+                          {releasingSlotFor === j.judgeId ? "Releasing…" : "Release seat"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {/* Live status — who's on stage, with a real photo instead of
                 just a name, so it reads at a glance rather than needing to
