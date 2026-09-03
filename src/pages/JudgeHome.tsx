@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorView } from "@/components/ui/status-view";
 import { ROUNDS, CATEGORIES } from "@/lib/rounds";
-import type { ScoringSessionDto } from "@/types/scoring";
+import type { ScoringSessionDto, MyRoundScoresDto } from "@/types/scoring";
 import { Lock, Radio, Sparkles, Sunrise, Trophy } from "lucide-react";
 
 // Miss Baguio 2026 "Road to Top 7" — see lib/rounds.ts for the full model.
@@ -15,11 +15,17 @@ const MORNING_ROUND_ID = 1;
 const CORONATION_ROUND_ID = 2;
 
 type RoundStatus = {
+  // ScoringSession is now purely cosmetic — "who's currently on stage" for
+  // the live audience/judge display. Whether THIS judge has submitted the
+  // round comes from `myScores` (see GetMyRoundScores — strictly scoped to
+  // the calling judge's own scores; judges never see other judges' scores
+  // or submission state).
   session: ScoringSessionDto | null;
+  myScores: MyRoundScoresDto | null;
   loading: boolean;
 };
 
-const emptyStatus: RoundStatus = { session: null, loading: true };
+const emptyStatus: RoundStatus = { session: null, myScores: null, loading: true };
 
 /**
  * A judge's landing page after login. Shows what's actually live right now
@@ -49,20 +55,30 @@ export default function JudgeHome() {
     })) as ScoringSessionDto | null;
   }
 
+  async function fetchMyScores(roundId: number): Promise<MyRoundScoresDto | null> {
+    return (await get(
+      `/api/scoring/rounds/${roundId}/my-scores`,
+      token ?? undefined
+    ).catch(() => null)) as MyRoundScoresDto | null;
+  }
+
   async function load() {
     setLoadError(null);
     setMorning((s) => ({ ...s, loading: true }));
     setCoronation((s) => ({ ...s, loading: true }));
     try {
-      const [morningSession, coronationSession] = await Promise.all([
-        fetchSession(MORNING_ROUND_ID),
-        fetchSession(CORONATION_ROUND_ID),
-      ]);
-      setMorning({ session: morningSession, loading: false });
-      setCoronation({ session: coronationSession, loading: false });
+      const [morningSession, coronationSession, morningScores, coronationScores] =
+        await Promise.all([
+          fetchSession(MORNING_ROUND_ID),
+          fetchSession(CORONATION_ROUND_ID),
+          fetchMyScores(MORNING_ROUND_ID),
+          fetchMyScores(CORONATION_ROUND_ID),
+        ]);
+      setMorning({ session: morningSession, myScores: morningScores, loading: false });
+      setCoronation({ session: coronationSession, myScores: coronationScores, loading: false });
     } catch (err) {
-      setMorning({ session: null, loading: false });
-      setCoronation({ session: null, loading: false });
+      setMorning({ session: null, myScores: null, loading: false });
+      setCoronation({ session: null, myScores: null, loading: false });
       setLoadError(err instanceof Error ? err.message : "Failed to load");
     }
   }
@@ -107,6 +123,17 @@ export default function JudgeHome() {
     );
   }
 
+  function progressLabel(status: RoundStatus) {
+    if (!status.myScores) return null;
+    const total =
+      status.myScores.candidates.length * status.myScores.categories.length;
+    const filled = status.myScores.candidates.reduce(
+      (sum, c) => sum + c.scores.filter((s) => s.scoreValue != null).length,
+      0
+    );
+    return `${filled}/${total} scored`;
+  }
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="mb-8">
@@ -114,7 +141,8 @@ export default function JudgeHome() {
           Hello, {user?.fullName ?? "Judge"}
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Pick a stage below to score the current candidate.
+          Score any candidate, in any order — nothing's final until you
+          submit the whole round.
         </p>
       </div>
 
@@ -131,18 +159,18 @@ export default function JudgeHome() {
             icon={Sunrise}
             title={
               ROUNDS.find((r) => r.id === MORNING_ROUND_ID)?.description ??
-              "Morning Session"
+              "Preliminaries"
             }
             loading={morning.loading}
             active={!!morning.session}
             statusLabel={
               morning.session
                 ? categoryFor(morning) ?? "In progress"
-                : "No active session"
+                : progressLabel(morning) ?? "Not started"
             }
             candidateName={morning.session?.candidate?.name}
-            hasSubmitted={morning.session?.hasSubmitted}
-            isLocked={morning.session?.isLocked}
+            hasSubmitted={morning.myScores?.isSubmitted}
+            isLocked={morning.myScores?.isSubmitted}
             onOpen={() => navigate(`/scoring/${MORNING_ROUND_ID}`)}
           />
           <StageCard
@@ -156,11 +184,11 @@ export default function JudgeHome() {
             statusLabel={
               coronation.session
                 ? categoryFor(coronation) ?? "In progress"
-                : "No active session"
+                : progressLabel(coronation) ?? "Not started"
             }
             candidateName={coronation.session?.candidate?.name}
-            hasSubmitted={coronation.session?.hasSubmitted}
-            isLocked={coronation.session?.isLocked}
+            hasSubmitted={coronation.myScores?.isSubmitted}
+            isLocked={coronation.myScores?.isSubmitted}
             onOpen={() => navigate("/finals-scoring")}
           />
           <StageCard

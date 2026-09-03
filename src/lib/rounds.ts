@@ -8,7 +8,7 @@
 // (Swimwear + Evening Wear). Talent and the old Closed Door Interview /
 // Swimsuit-first/second split are gone for 2026.
 export const ROUNDS = [
-  { id: 1, key: "morning", description: "Sep 5 Morning Session" },
+  { id: 1, key: "morning", description: "Preliminaries" },
   { id: 2, key: "coronation", description: "Coronation Night" },
   { id: 3, key: "top7", description: "Top 7" },
 ] as const;

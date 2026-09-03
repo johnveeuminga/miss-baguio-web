@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { get, post, put } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
+import { useScoringControl } from "@/hooks/useScoringControl";
+import { extractErrorMessage } from "@/hooks/useRoundScoring";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,7 +16,7 @@ import {
 } from "@/components/ui/select";
 import { LoadingView, ErrorView } from "@/components/ui/status-view";
 import { toast } from "sonner";
-import { CheckCircle2, ChevronRight, Lock, LockOpen, Play, Square, Trophy, AlertTriangle, Star, RefreshCw } from "lucide-react";
+import { CheckCircle2, ChevronRight, Radio, Square, Trophy, AlertTriangle, Star, RefreshCw } from "lucide-react";
 import type { Candidate } from "@/types/candidate";
 import type { ScoringSessionDto } from "@/types/scoring";
 
@@ -84,8 +86,49 @@ export default function AdminActiveControl() {
     Record<number, number>
   >({});
   const hubConnection = useScoringHubConnection(token);
+  const { control: scoringControl, reload: reloadScoringControl } = useScoringControl();
 
   const selectedRound = rounds.find((r) => r.id === roundId) ?? null;
+
+  // Whether the round+category picked above is the one currently open for
+  // judges to score — reads the same GET /api/scoring/control this card's
+  // Round/Category selects are about to double as the editor for. Was
+  // previously a second, separate Round+Category picker (CategoryLockCard)
+  // sitting right above this one, which just looked like a confusing
+  // duplicate control since both usually pointed at the same round/category
+  // anyway — there's no real workflow where "what judges can score" and
+  // "who's on stage" should ever differ in this pageant.
+  const isThisCategoryOpen =
+    scoringControl?.isScoringOpen === true &&
+    scoringControl.activeRoundId === roundId &&
+    scoringControl.activeCategoryId === categoryId;
+
+  async function toggleCategoryLock() {
+    if (!roundId || !categoryId) return;
+    setBusy(true);
+    try {
+      const res = (await put(
+        "/api/scoring/control",
+        {
+          activeRoundId: roundId,
+          activeCategoryId: categoryId,
+          isScoringOpen: !isThisCategoryOpen,
+          isRealtimeDisplayEnabled: scoringControl?.isRealtimeDisplayEnabled ?? false,
+        },
+        token ?? undefined
+      )) as { activeCategoryName?: string | null };
+      toast.success(
+        isThisCategoryOpen
+          ? "Scoring closed — judges can't submit until you open a category again."
+          : `${res.activeCategoryName ?? "This category"} is now open for scoring.`
+      );
+      await reloadScoringControl();
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to update scoring lock"));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
@@ -318,25 +361,6 @@ export default function AdminActiveControl() {
     }
   }
 
-  async function toggleLock() {
-    if (!activeSession) return;
-    setBusy(true);
-    const nextLocked = !activeSession.isLocked;
-    try {
-      await post(
-        "/api/scoring/session/lock",
-        { scoringSessionId: activeSession.id, lock: nextLocked },
-        token ?? undefined
-      );
-      setActiveSession((s) => (s ? { ...s, isLocked: nextLocked } : s));
-      toast.success(nextLocked ? "Scoring locked" : "Scoring unlocked");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update lock");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   // The next candidate in roster order after whoever is currently live.
   // Null when we're on the last candidate (or nothing is active), which is
   // what hides the Next Candidate button at the end of a category.
@@ -449,20 +473,69 @@ export default function AdminActiveControl() {
           status card, then the scoresheet. Round & Category comes first —
           it's informational context ("what are we even looking at") — with
           the live session status and actions underneath it in the same
-          card, rather than two separate cards competing for top billing. */}
+          card, rather than two separate cards competing for top billing.
+          Redesigned tablet-first: real touch-target heights (h-11/44px,
+          matching the judge-facing RoundScoring screen's own convention)
+          instead of the original h-8 desktop-density selects, and each of
+          the three concerns (context / scoring gate / live status) gets
+          its own clearly separated block instead of three cramped strips. */}
       <div className="space-y-4">
         <Card>
-          <CardContent className="pt-4 pb-3 space-y-2.5">
-            {/* Round / Category / Jump-to-candidate — one compact row
-                instead of three separately-labeled stacked blocks. This is
-                the "context" strip: what are we even looking at right now. */}
-            <div className="grid grid-cols-[1fr_1fr_1.3fr_auto] gap-2 items-center">
+          <CardContent className="pt-5 pb-5 space-y-4">
+            {/* Scoring gate — topmost since it's the single most important
+                thing admin needs to see/control: can judges submit right
+                now, or not. A compact switch + status text instead of the
+                previous bordered panel — it's a binary on/off, doesn't
+                need that much visual weight, just needs to be unmissable
+                at the very top. This is the ONE gate that actually exists
+                (the old per-session lock button was dead code — nothing
+                checked it — and was removed). */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isThisCategoryOpen}
+              disabled={busy || !roundId || !categoryId}
+              onClick={toggleCategoryLock}
+              className="w-full flex items-center justify-between gap-3 disabled:opacity-50"
+            >
+              <span
+                className={`font-semibold ${
+                  isThisCategoryOpen
+                    ? "text-emerald-700 dark:text-emerald-400"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {isThisCategoryOpen ? "Scoring Open" : "Scoring Closed"}
+              </span>
+              {/* Hand-rolled switch (no Switch primitive in this UI kit
+                  yet) — track + sliding knob, 44px-tall hit area for
+                  tablet even though the visible track is slimmer. */}
+              <span
+                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${
+                  isThisCategoryOpen ? "bg-emerald-500" : "bg-muted-foreground/30"
+                }`}
+              >
+                <span
+                  className={`inline-block size-6 transform rounded-full bg-white shadow transition-transform ${
+                    isThisCategoryOpen ? "translate-x-7" : "translate-x-1"
+                  }`}
+                />
+              </span>
+            </button>
+
+            {/* Round, Category, Candidate, Go Live — all four together in
+                one row on tablet-width screens and wider (a real iPad in
+                landscape has plenty of room for this); wraps to two rows
+                on anything narrower rather than clipping. Round/Category
+                still real dropdowns, just given less relative width since
+                they change far less often than the candidate picker. */}
+            <div className="flex flex-wrap gap-2.5">
               <Select
                 value={roundId != null ? String(roundId) : undefined}
                 onValueChange={(v) => setRoundId(Number(v))}
                 disabled={busy}
               >
-                <SelectTrigger className="h-8 text-xs bg-muted border-border">
+                <SelectTrigger className="h-11 bg-muted border-border w-[9.5rem] shrink-0">
                   <SelectValue placeholder="Round" />
                 </SelectTrigger>
                 <SelectContent>
@@ -478,7 +551,7 @@ export default function AdminActiveControl() {
                 onValueChange={(v) => setCategoryId(Number(v))}
                 disabled={busy || !selectedRound}
               >
-                <SelectTrigger className="h-8 text-xs bg-muted border-border">
+                <SelectTrigger className="h-11 bg-muted border-border w-[9.5rem] shrink-0">
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -494,8 +567,8 @@ export default function AdminActiveControl() {
                 onValueChange={(v) => setCandidateId(Number(v))}
                 disabled={busy}
               >
-                <SelectTrigger className="h-8 text-xs bg-muted border-border">
-                  <SelectValue placeholder="Jump to candidate" />
+                <SelectTrigger className="h-11 bg-muted border-border flex-1 min-w-[12rem]">
+                  <SelectValue placeholder="Pick a candidate…" />
                 </SelectTrigger>
                 <SelectContent>
                   {candidates.map((c) => {
@@ -512,7 +585,7 @@ export default function AdminActiveControl() {
                       <SelectItem key={c.id} value={String(c.id)}>
                         {done ? "✓ " : ""}#{c.id} — {c.name}
                         {totalJudges != null
-                          ? ` (${submitted}/${totalJudges})`
+                          ? ` · ${submitted}/${totalJudges} judges`
                           : ""}
                       </SelectItem>
                     );
@@ -537,79 +610,72 @@ export default function AdminActiveControl() {
                     categoryId === activeSession?.categoryId)
                 }
                 variant="outline"
-                size="sm"
+                className="h-11 px-5 shrink-0"
               >
-                <Play className="size-3.5" />
-                {activeSession ? "Jump" : "Start"}
+                <Radio className="size-4" />
+                Go Live
               </Button>
             </div>
 
-            {/* Live status — a single slim strip, not a boxed card-within-
-                a-card. Name + category + progress + actions all on one
-                line so this doesn't add its own block of vertical space. */}
+            {/* Live status — who's on stage, with a real photo instead of
+                just a name, so it reads at a glance rather than needing to
+                be parsed as text. */}
             {sessionLoading ? (
-              <div className="text-xs text-muted-foreground">Checking…</div>
+              <div className="text-sm text-muted-foreground px-1">Checking for a live session…</div>
             ) : !activeSession ? (
-              <div className="text-xs text-muted-foreground">
+              <div className="text-sm text-muted-foreground px-1">
                 No active session — pick a candidate above to start.
               </div>
             ) : (
-              <div className="flex items-center gap-3 rounded-md border-l-4 border-emerald-500 bg-emerald-500/5 pl-2.5 pr-2 py-1.5 flex-wrap">
-                <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                <div className="min-w-0">
-                  <span className="font-semibold text-sm">
-                    {activeSession.candidate?.name ??
-                      `Candidate #${activeSession.candidateId}`}
-                  </span>
-                  <span className="text-xs text-muted-foreground ml-1.5">
-                    {activeSession.category?.description ?? "—"}
-                  </span>
+              <div className="flex items-center gap-3 rounded-lg border-l-4 border-emerald-500 bg-emerald-500/5 p-3 flex-wrap">
+                <div className="size-14 rounded-md overflow-hidden shrink-0 bg-muted">
+                  {activeSession.candidate?.photoUrl ? (
+                    <img
+                      src={activeSession.candidate.photoUrl}
+                      alt={activeSession.candidate.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-sm font-bold text-muted-foreground">
+                      {(activeSession.candidate?.name ?? "?").slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {snapshot ? snapshot.countSubmitted : 0}
-                  {totalJudges != null ? `/${totalJudges}` : ""} submitted
-                  {snapshot &&
-                    totalJudges != null &&
-                    snapshot.countSubmitted >= totalJudges && (
-                      <CheckCircle2 className="inline size-3.5 ml-1 text-emerald-600 align-[-2px]" />
-                    )}
-                </span>
-                {activeSession.isLocked && (
-                  <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                    <Lock className="size-3.5" /> Locked
-                  </span>
-                )}
-
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide">
+                      On stage
+                    </span>
+                  </div>
+                  <div className="font-bold truncate">
+                    {activeSession.candidate?.name ?? `Candidate #${activeSession.candidateId}`}
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {activeSession.category?.description ?? "—"} ·{" "}
+                    {snapshot ? snapshot.countSubmitted : 0}
+                    {totalJudges != null ? `/${totalJudges}` : ""} submitted
+                    {snapshot &&
+                      totalJudges != null &&
+                      snapshot.countSubmitted >= totalJudges && (
+                        <CheckCircle2 className="inline size-4 ml-1 text-emerald-600 align-[-3px]" />
+                      )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
                   {nextCandidate && (
-                    <Button
-                      onClick={goToNextCandidate}
-                      disabled={busy}
-                      size="sm"
-                    >
-                      Next <ChevronRight className="size-3.5" /> #
-                      {nextCandidate.id}
+                    <Button onClick={goToNextCandidate} disabled={busy} className="h-11 flex-1 sm:flex-none">
+                      Next <ChevronRight className="size-4" /> #{nextCandidate.id}
                     </Button>
                   )}
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleLock}
-                    disabled={busy}
-                  >
-                    {activeSession.isLocked ? (
-                      <LockOpen className="size-3.5" />
-                    ) : (
-                      <Lock className="size-3.5" />
-                    )}
-                  </Button>
-                  <Button
                     variant="destructive"
-                    size="sm"
-                    onClick={stopSession}
                     disabled={busy}
+                    onClick={stopSession}
+                    className="h-11 px-4"
                   >
-                    <Square className="size-3.5" />
+                    <Square className="size-4" />
+                    Stop
                   </Button>
                 </div>
               </div>

@@ -5,7 +5,7 @@ import Login from "./pages/Login";
 import Unauthorized from "./pages/Unauthorized";
 import { Navigate } from "react-router-dom";
 import JudgeHome from "./pages/JudgeHome";
-import FinalsScoring from "./pages/FinalsScoring";
+import RoundScoring from "./pages/RoundScoring";
 import ViewerScoreboard from "./pages/ViewerScoreboard";
 import Top7Ranking from "./pages/Top7Ranking";
 import AdminActiveControl from "./components/AdminActiveControl";
@@ -69,7 +69,7 @@ function AppRouter() {
             path="/finals-scoring"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <FinalsScoring />
+                <RoundScoring />
               </ProtectedRoute>
             }
           />
@@ -77,7 +77,7 @@ function AppRouter() {
             path="/scoring/:roundId"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <FinalsScoring />
+                <RoundScoring />
               </ProtectedRoute>
             }
           />

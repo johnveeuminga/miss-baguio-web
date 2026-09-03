@@ -84,7 +84,7 @@ export default function CombinedResultsTable() {
           <AlertTriangle className="size-4 shrink-0 mt-0.5" />
           <span>
             <strong>Partial results.</strong> Not every candidate has been
-            scored in every category yet (e.g. Morning Session done but
+            scored in every category yet (e.g. Preliminaries done but
             Coronation Night hasn't started). Ranks and totals below only
             reflect what's been scored so far — they are{" "}
             <strong>not</strong> the final standings.
