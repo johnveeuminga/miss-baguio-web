@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { get, post, put } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -25,6 +25,7 @@ type CategoryDto = {
   roundId: number;
   name: string;
   description: string;
+  expectedJudgeCount?: number | null;
 };
 
 type RoundDto = {
@@ -89,6 +90,60 @@ export default function AdminActiveControl() {
   const { control: scoringControl, reload: reloadScoringControl } = useScoringControl();
 
   const selectedRound = rounds.find((r) => r.id === roundId) ?? null;
+  const selectedCategory =
+    selectedRound?.categories.find((c) => c.id === categoryId) ?? null;
+
+  const [editingJudgeCount, setEditingJudgeCount] = useState(false);
+  const [savingJudgeCount, setSavingJudgeCount] = useState(false);
+  const skipNextJudgeCountBlurSave = useRef(false);
+
+  // Switching category (or round) mid-edit should never save the typed
+  // value against a now-different category — bail out of edit mode instead.
+  useEffect(() => {
+    setEditingJudgeCount(false);
+  }, [categoryId]);
+
+  async function saveExpectedJudgeCount(rawValue: string) {
+    if (!selectedCategory) return;
+    const trimmed = rawValue.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (parsed !== null && (!Number.isInteger(parsed) || parsed < 1)) {
+      toast.error("Judge count must be a whole number of 1 or more (or blank to use the default).");
+      return;
+    }
+    setSavingJudgeCount(true);
+    try {
+      await put(
+        `/api/admin/categories/${selectedCategory.id}/expected-judge-count`,
+        { expectedJudgeCount: parsed },
+        token ?? undefined
+      );
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.id !== selectedCategory.roundId
+            ? r
+            : {
+                ...r,
+                categories: r.categories.map((c) =>
+                  c.id === selectedCategory.id
+                    ? { ...c, expectedJudgeCount: parsed }
+                    : c
+                ),
+              }
+        )
+      );
+      toast.success(
+        parsed === null
+          ? `${selectedCategory.description} now uses the default judge count.`
+          : `${selectedCategory.description} now expects ${parsed} judge${parsed === 1 ? "" : "s"}.`
+      );
+      setEditingJudgeCount(false);
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to update expected judge count"));
+    } finally {
+      setSavingJudgeCount(false);
+    }
+  }
 
   // Whether the round+category picked above is the one currently open for
   // judges to score — reads the same GET /api/scoring/control this card's
@@ -562,6 +617,58 @@ export default function AdminActiveControl() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Per-category judge count override — for rounds like
+                  Preliminaries where the panel isn't the full judge roster
+                  and can differ category to category (e.g. Q&A judged by 3,
+                  Costume by 5). Purely a display input for the "N/X judges"
+                  progress elsewhere; doesn't gate who can actually score. */}
+              {selectedCategory &&
+                (editingJudgeCount ? (
+                  <div className="flex h-11 items-center gap-1 rounded-md border border-border bg-muted px-2">
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      autoFocus
+                      defaultValue={selectedCategory.expectedJudgeCount ?? ""}
+                      placeholder="default"
+                      disabled={savingJudgeCount}
+                      className="w-16 bg-transparent text-sm outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          // Blur triggers the actual save below — avoids a
+                          // double-save from Enter firing save and then the
+                          // resulting blur firing it again.
+                          (e.target as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          skipNextJudgeCountBlurSave.current = true;
+                          setEditingJudgeCount(false);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (skipNextJudgeCountBlurSave.current) {
+                          skipNextJudgeCountBlurSave.current = false;
+                          return;
+                        }
+                        saveExpectedJudgeCount(e.target.value);
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">judges</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingJudgeCount(true)}
+                    disabled={busy}
+                    className="flex h-11 items-center gap-1.5 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground hover:border-primary hover:text-foreground"
+                    title="Set how many judges are expected to score this category"
+                  >
+                    {selectedCategory.expectedJudgeCount != null
+                      ? `${selectedCategory.expectedJudgeCount} judges`
+                      : `${totalJudges ?? "?"} judges (default)`}
+                  </button>
+                ))}
               <Select
                 value={candidateId != null ? String(candidateId) : undefined}
                 onValueChange={(v) => setCandidateId(Number(v))}
