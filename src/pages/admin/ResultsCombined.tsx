@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, Printer } from "lucide-react";
 import MissBaguioResultsTable from "./MissBaguioResultsTable";
 import CombinedResultsTable from "./CombinedResultsTable";
+import PreliminaryResultsTable from "./PreliminaryResultsTable";
 import Top5ResultsTable from "./Top5ResultsTable";
 import Top5CandidatesTable from "./Top5CandidatesTable";
 import SpecialAwardsTable from "./SpecialAwardsTable";
@@ -19,6 +20,12 @@ const VIEWS = [
     id: "combined",
     label: "All Scores",
     description: "Every candidate's Morning + Coronation Night scores.",
+  },
+  {
+    id: "preliminary",
+    label: "Preliminaries Tally",
+    description:
+      "Q&A + Creative Costume only — reviewable right after Preliminaries wraps, before Coronation Night starts.",
   },
   {
     id: "top5",
@@ -98,6 +105,8 @@ export default function ResultsCombined() {
           </p>
           {view === "combined" ? (
             <CombinedResultsTable />
+          ) : view === "preliminary" ? (
+            <PreliminaryResultsTable />
           ) : view === "top5" ? (
             <Top5ResultsTable />
           ) : view === "miss-baguio" ? (
