@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
-import { get, post, put } from "@/lib/api";
+import { get, post, put, del } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
 import { useScoringControl } from "@/hooks/useScoringControl";
@@ -25,6 +25,7 @@ type CategoryDto = {
   roundId: number;
   name: string;
   description: string;
+  expectedJudgeCount?: number | null;
 };
 
 type RoundDto = {
@@ -52,6 +53,25 @@ type SessionSnapshotDto = {
 type CandidateScoreDto = {
   candidateId: number;
   judgesSubmitted?: number | null;
+};
+
+type AssignedJudgeDto = {
+  judgeId: number;
+  judgeName: string;
+  claimedAt: string;
+};
+
+type ScoringProgressCategoryDto = {
+  categoryId: number;
+  expectedJudgeCount: number;
+  isCustomJudgeCount: boolean;
+  assignedJudges: AssignedJudgeDto[] | null;
+  openSlots: number | null;
+};
+
+type ScoringProgressRoundDto = {
+  roundId: number;
+  categories: ScoringProgressCategoryDto[];
 };
 
 /**
@@ -89,6 +109,132 @@ export default function AdminActiveControl() {
   const { control: scoringControl, reload: reloadScoringControl } = useScoringControl();
 
   const selectedRound = rounds.find((r) => r.id === roundId) ?? null;
+  const selectedCategory =
+    selectedRound?.categories.find((c) => c.id === categoryId) ?? null;
+
+  // The judge count that actually applies to the selected category — its
+  // own cap when the admin has set one (e.g. Q&A capped at 5), otherwise
+  // the global active-judge count. Every "N/X judges" display in this card
+  // must use this, not the raw global totalJudges, or a capped category
+  // keeps showing ".../9" even though only 5 can ever score it.
+  const effectiveJudgeCount = selectedCategory?.expectedJudgeCount ?? totalJudges;
+
+  // Same idea as effectiveJudgeCount, but for whichever category the live
+  // "on stage" session actually belongs to — usually the same as the
+  // selected picker category, but not guaranteed (the picker can be moved
+  // without re-hitting Go Live), so this is looked up independently rather
+  // than assumed to equal effectiveJudgeCount.
+  const sessionCategory = activeSession
+    ? rounds
+        .flatMap((r) => r.categories)
+        .find((c) => c.id === activeSession.categoryId)
+    : null;
+  const sessionJudgeCount = sessionCategory?.expectedJudgeCount ?? totalJudges;
+
+  const [editingJudgeCount, setEditingJudgeCount] = useState(false);
+  const [savingJudgeCount, setSavingJudgeCount] = useState(false);
+  const skipNextJudgeCountBlurSave = useRef(false);
+
+  const [assignedJudges, setAssignedJudges] = useState<AssignedJudgeDto[]>([]);
+  const [showAssignedJudges, setShowAssignedJudges] = useState(false);
+  const [releasingSlotFor, setReleasingSlotFor] = useState<number | null>(null);
+
+  const loadAssignedJudges = useCallback(
+    async (catId: number) => {
+      try {
+        const progress = (await get(
+          "/api/admin/scoring-progress",
+          token ?? undefined
+        )) as ScoringProgressRoundDto[];
+        const category = progress
+          .flatMap((r) => r.categories)
+          .find((c) => c.categoryId === catId);
+        setAssignedJudges(category?.assignedJudges ?? []);
+      } catch {
+        // Non-critical — the judges list is just a convenience view; a
+        // failed fetch shouldn't block the rest of the card.
+        setAssignedJudges([]);
+      }
+    },
+    [token]
+  );
+
+  // Refetch whenever the selected category (or its cap) changes, so the
+  // occupant list never shows a stale category's judges.
+  useEffect(() => {
+    if (categoryId != null && selectedCategory?.expectedJudgeCount != null) {
+      loadAssignedJudges(categoryId);
+    } else {
+      setAssignedJudges([]);
+      setShowAssignedJudges(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryId, selectedCategory?.expectedJudgeCount]);
+
+  async function releaseJudgeSlot(judgeId: number) {
+    if (!selectedCategory) return;
+    setReleasingSlotFor(judgeId);
+    try {
+      await del(
+        `/api/admin/categories/${selectedCategory.id}/judge-slots/${judgeId}`,
+        token ?? undefined
+      );
+      toast.success(`Freed that judge's seat in ${selectedCategory.description}.`);
+      await loadAssignedJudges(selectedCategory.id);
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to release the judge's seat"));
+    } finally {
+      setReleasingSlotFor(null);
+    }
+  }
+
+  // Switching category (or round) mid-edit should never save the typed
+  // value against a now-different category — bail out of edit mode instead.
+  useEffect(() => {
+    setEditingJudgeCount(false);
+  }, [categoryId]);
+
+  async function saveExpectedJudgeCount(rawValue: string) {
+    if (!selectedCategory) return;
+    const trimmed = rawValue.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (parsed !== null && (!Number.isInteger(parsed) || parsed < 1)) {
+      toast.error("Judge count must be a whole number of 1 or more (or blank to use the default).");
+      return;
+    }
+    setSavingJudgeCount(true);
+    try {
+      await put(
+        `/api/admin/categories/${selectedCategory.id}/expected-judge-count`,
+        { expectedJudgeCount: parsed },
+        token ?? undefined
+      );
+      setRounds((prev) =>
+        prev.map((r) =>
+          r.id !== selectedCategory.roundId
+            ? r
+            : {
+                ...r,
+                categories: r.categories.map((c) =>
+                  c.id === selectedCategory.id
+                    ? { ...c, expectedJudgeCount: parsed }
+                    : c
+                ),
+              }
+        )
+      );
+      toast.success(
+        parsed === null
+          ? `${selectedCategory.description} now uses the default judge count.`
+          : `${selectedCategory.description} now expects ${parsed} judge${parsed === 1 ? "" : "s"}.`
+      );
+      setEditingJudgeCount(false);
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to update expected judge count"));
+    } finally {
+      setSavingJudgeCount(false);
+    }
+  }
 
   // Whether the round+category picked above is the one currently open for
   // judges to score — reads the same GET /api/scoring/control this card's
@@ -562,6 +708,74 @@ export default function AdminActiveControl() {
                   ))}
                 </SelectContent>
               </Select>
+
+              {/* Per-category judge count override — for rounds like
+                  Preliminaries where the panel isn't the full judge roster
+                  and can differ category to category (e.g. Q&A judged by 3,
+                  Costume by 5). This IS enforced server-side — once this many
+                  distinct judges have scored the category, anyone else is
+                  refused. Below it, an occupant list (once someone's scored)
+                  shows exactly who holds a seat, with a way to free one. */}
+              {selectedCategory &&
+                (editingJudgeCount ? (
+                  <div className="flex h-11 items-center gap-1 rounded-md border border-border bg-muted px-2">
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      autoFocus
+                      defaultValue={selectedCategory.expectedJudgeCount ?? ""}
+                      placeholder="default"
+                      disabled={savingJudgeCount}
+                      className="w-16 bg-transparent text-sm outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          // Blur triggers the actual save below — avoids a
+                          // double-save from Enter firing save and then the
+                          // resulting blur firing it again.
+                          (e.target as HTMLInputElement).blur();
+                        } else if (e.key === "Escape") {
+                          skipNextJudgeCountBlurSave.current = true;
+                          setEditingJudgeCount(false);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (skipNextJudgeCountBlurSave.current) {
+                          skipNextJudgeCountBlurSave.current = false;
+                          return;
+                        }
+                        saveExpectedJudgeCount(e.target.value);
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground">judges</span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setEditingJudgeCount(true)}
+                    disabled={busy}
+                    className="flex h-11 items-center gap-1.5 rounded-md border border-dashed border-border px-3 text-sm text-muted-foreground hover:border-primary hover:text-foreground"
+                    title="Set how many judges are expected to score this category"
+                  >
+                    {selectedCategory.expectedJudgeCount != null
+                      ? `${selectedCategory.expectedJudgeCount} judges`
+                      : `${totalJudges ?? "?"} judges (default)`}
+                  </button>
+                ))}
+
+              {selectedCategory?.expectedJudgeCount != null && (
+                <button
+                  type="button"
+                  onClick={() => setShowAssignedJudges((v) => !v)}
+                  className="flex h-11 items-center gap-1.5 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+                  title="See which judges hold a seat in this category"
+                >
+                  {assignedJudges.length}/{selectedCategory.expectedJudgeCount} seated
+                  <ChevronRight
+                    className={`size-3.5 transition-transform ${showAssignedJudges ? "rotate-90" : ""}`}
+                  />
+                </button>
+              )}
               <Select
                 value={candidateId != null ? String(candidateId) : undefined}
                 onValueChange={(v) => setCandidateId(Number(v))}
@@ -574,7 +788,7 @@ export default function AdminActiveControl() {
                   {candidates.map((c) => {
                     const submitted = completionByCandidate[c.id] ?? 0;
                     const done =
-                      totalJudges != null && submitted >= totalJudges;
+                      effectiveJudgeCount != null && submitted >= effectiveJudgeCount;
                     // Plain text only — SelectItem's children become the
                     // collapsed trigger's SelectValue content too (via
                     // Radix's ItemText), so icons/badges here would also
@@ -584,8 +798,8 @@ export default function AdminActiveControl() {
                     return (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {done ? "✓ " : ""}#{c.id} — {c.name}
-                        {totalJudges != null
-                          ? ` · ${submitted}/${totalJudges} judges`
+                        {effectiveJudgeCount != null
+                          ? ` · ${submitted}/${effectiveJudgeCount} judges`
                           : ""}
                       </SelectItem>
                     );
@@ -616,6 +830,35 @@ export default function AdminActiveControl() {
                 Go Live
               </Button>
             </div>
+
+            {showAssignedJudges && selectedCategory?.expectedJudgeCount != null && (
+              <div className="mt-2 rounded-md border border-border bg-muted/50 p-2 text-sm">
+                {assignedJudges.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    No seats claimed yet — the first {selectedCategory.expectedJudgeCount}{" "}
+                    judge{selectedCategory.expectedJudgeCount === 1 ? "" : "s"} to submit a
+                    score here will take them.
+                  </p>
+                ) : (
+                  <ul className="space-y-1">
+                    {assignedJudges.map((j) => (
+                      <li key={j.judgeId} className="flex items-center justify-between gap-2">
+                        <span>{j.judgeName}</span>
+                        <button
+                          type="button"
+                          onClick={() => releaseJudgeSlot(j.judgeId)}
+                          disabled={releasingSlotFor === j.judgeId}
+                          className="text-xs text-destructive hover:underline disabled:opacity-50"
+                          title="Free this seat — also removes their scores in this category"
+                        >
+                          {releasingSlotFor === j.judgeId ? "Releasing…" : "Release seat"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             {/* Live status — who's on stage, with a real photo instead of
                 just a name, so it reads at a glance rather than needing to
@@ -654,10 +897,10 @@ export default function AdminActiveControl() {
                   <div className="text-sm text-muted-foreground">
                     {activeSession.category?.description ?? "—"} ·{" "}
                     {snapshot ? snapshot.countSubmitted : 0}
-                    {totalJudges != null ? `/${totalJudges}` : ""} submitted
+                    {sessionJudgeCount != null ? `/${sessionJudgeCount}` : ""} submitted
                     {snapshot &&
-                      totalJudges != null &&
-                      snapshot.countSubmitted >= totalJudges && (
+                      sessionJudgeCount != null &&
+                      snapshot.countSubmitted >= sessionJudgeCount && (
                         <CheckCircle2 className="inline size-4 ml-1 text-emerald-600 align-[-3px]" />
                       )}
                   </div>
@@ -700,7 +943,7 @@ export default function AdminActiveControl() {
                 roundLabel={selectedRound.description}
                 categoryName={selectedCategory.name}
                 categoryLabel={selectedCategory.description}
-                totalJudges={totalJudges}
+                totalJudges={selectedCategory.expectedJudgeCount ?? totalJudges}
                 token={token}
               />
             );
