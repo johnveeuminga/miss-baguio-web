@@ -112,6 +112,25 @@ export default function AdminActiveControl() {
   const selectedCategory =
     selectedRound?.categories.find((c) => c.id === categoryId) ?? null;
 
+  // The judge count that actually applies to the selected category — its
+  // own cap when the admin has set one (e.g. Q&A capped at 5), otherwise
+  // the global active-judge count. Every "N/X judges" display in this card
+  // must use this, not the raw global totalJudges, or a capped category
+  // keeps showing ".../9" even though only 5 can ever score it.
+  const effectiveJudgeCount = selectedCategory?.expectedJudgeCount ?? totalJudges;
+
+  // Same idea as effectiveJudgeCount, but for whichever category the live
+  // "on stage" session actually belongs to — usually the same as the
+  // selected picker category, but not guaranteed (the picker can be moved
+  // without re-hitting Go Live), so this is looked up independently rather
+  // than assumed to equal effectiveJudgeCount.
+  const sessionCategory = activeSession
+    ? rounds
+        .flatMap((r) => r.categories)
+        .find((c) => c.id === activeSession.categoryId)
+    : null;
+  const sessionJudgeCount = sessionCategory?.expectedJudgeCount ?? totalJudges;
+
   const [editingJudgeCount, setEditingJudgeCount] = useState(false);
   const [savingJudgeCount, setSavingJudgeCount] = useState(false);
   const skipNextJudgeCountBlurSave = useRef(false);
@@ -769,7 +788,7 @@ export default function AdminActiveControl() {
                   {candidates.map((c) => {
                     const submitted = completionByCandidate[c.id] ?? 0;
                     const done =
-                      totalJudges != null && submitted >= totalJudges;
+                      effectiveJudgeCount != null && submitted >= effectiveJudgeCount;
                     // Plain text only — SelectItem's children become the
                     // collapsed trigger's SelectValue content too (via
                     // Radix's ItemText), so icons/badges here would also
@@ -779,8 +798,8 @@ export default function AdminActiveControl() {
                     return (
                       <SelectItem key={c.id} value={String(c.id)}>
                         {done ? "✓ " : ""}#{c.id} — {c.name}
-                        {totalJudges != null
-                          ? ` · ${submitted}/${totalJudges} judges`
+                        {effectiveJudgeCount != null
+                          ? ` · ${submitted}/${effectiveJudgeCount} judges`
                           : ""}
                       </SelectItem>
                     );
@@ -878,10 +897,10 @@ export default function AdminActiveControl() {
                   <div className="text-sm text-muted-foreground">
                     {activeSession.category?.description ?? "—"} ·{" "}
                     {snapshot ? snapshot.countSubmitted : 0}
-                    {totalJudges != null ? `/${totalJudges}` : ""} submitted
+                    {sessionJudgeCount != null ? `/${sessionJudgeCount}` : ""} submitted
                     {snapshot &&
-                      totalJudges != null &&
-                      snapshot.countSubmitted >= totalJudges && (
+                      sessionJudgeCount != null &&
+                      snapshot.countSubmitted >= sessionJudgeCount && (
                         <CheckCircle2 className="inline size-4 ml-1 text-emerald-600 align-[-3px]" />
                       )}
                   </div>
@@ -924,7 +943,7 @@ export default function AdminActiveControl() {
                 roundLabel={selectedRound.description}
                 categoryName={selectedCategory.name}
                 categoryLabel={selectedCategory.description}
-                totalJudges={totalJudges}
+                totalJudges={selectedCategory.expectedJudgeCount ?? totalJudges}
                 token={token}
               />
             );
