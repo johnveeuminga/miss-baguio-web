@@ -67,19 +67,31 @@ export default function PreliminaryResultsTable({
 
   // Announce view — a placement sheet for the host: ranked order, candidate
   // number, name, Preliminaries Total, Rank. No judge columns, no weighting
-  // math. Unranked candidates (nobody scored them yet) fall to the bottom.
+  // math. A candidate is only "placed" once she has an actual non-zero
+  // total — otherwise Place shows "—" with no star and she sinks to the
+  // bottom, so an all-zero pre-scoring sheet doesn't read like a standing.
   if (mode === "announce") {
+    const isPlaced = (r: CandidateFullTableDto): boolean =>
+      r.rank != null && r.weightedTotal != null && r.weightedTotal > 0;
     const ranked = [...results].sort((a, b) => {
-      const ra = a.rank ?? Number.POSITIVE_INFINITY;
-      const rb = b.rank ?? Number.POSITIVE_INFINITY;
-      if (ra !== rb) return ra - rb;
+      const pa = isPlaced(a);
+      const pb = isPlaced(b);
+      if (pa !== pb) return pa ? -1 : 1;
+      if (pa && pb) return (a.rank ?? 0) - (b.rank ?? 0);
       return a.candidateNo - b.candidateNo;
     });
+    const anyPlaced = results.some(isPlaced);
     return (
       <div className="printable">
         <h3 className="mb-2 text-base font-semibold">
           Preliminaries — Standings
         </h3>
+        {!anyPlaced && (
+          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            No scores yet — nobody is placed. This sheet fills in as judges
+            score.
+          </p>
+        )}
         <div className="overflow-auto">
           <table
             className="min-w-full border-collapse table-auto text-base"
@@ -94,24 +106,29 @@ export default function PreliminaryResultsTable({
               </tr>
             </thead>
             <tbody>
-              {ranked.map((r) => (
-                <tr
-                  key={r.candidateId}
-                  className={cn(
-                    r.rank != null && r.rank <= 7 ? "font-bold" : ""
-                  )}
-                >
-                  <td className="border px-3 py-2">
-                    {r.rank ?? "—"}
-                    {r.rank != null && r.rank <= 7 ? " ★" : ""}
-                  </td>
-                  <td className="border px-3 py-2">{r.candidateNo}</td>
-                  <td className="border px-3 py-2">{r.candidateName}</td>
-                  <td className="border px-3 py-2 text-right">
-                    {r.weightedTotal != null ? r.weightedTotal.toFixed(2) : "—"}
-                  </td>
-                </tr>
-              ))}
+              {ranked.map((r) => {
+                const placed = isPlaced(r);
+                return (
+                  <tr
+                    key={r.candidateId}
+                    className={cn(
+                      placed && r.rank != null && r.rank <= 7 ? "font-bold" : ""
+                    )}
+                  >
+                    <td className="border px-3 py-2">
+                      {placed ? r.rank : "—"}
+                      {placed && r.rank != null && r.rank <= 7 ? " ★" : ""}
+                    </td>
+                    <td className="border px-3 py-2">{r.candidateNo}</td>
+                    <td className="border px-3 py-2">{r.candidateName}</td>
+                    <td className="border px-3 py-2 text-right">
+                      {r.weightedTotal != null && r.weightedTotal > 0
+                        ? r.weightedTotal.toFixed(2)
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
