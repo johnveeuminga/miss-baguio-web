@@ -635,15 +635,14 @@ export default function AdminActiveControl() {
                 need that much visual weight, just needs to be unmissable
                 at the very top. This is the ONE gate that actually exists
                 (the old per-session lock button was dead code — nothing
-                checked it — and was removed). */}
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isThisCategoryOpen}
-              disabled={busy || !roundId || !categoryId}
-              onClick={toggleCategoryLock}
-              className="w-full flex items-center justify-between gap-3 disabled:opacity-50"
-            >
+                checked it — and was removed).
+                The label and switch used to share one w-full button, so any
+                tap across the whole row — not just the switch — flipped
+                scoring on/off; on a tablet, a brush near the label or empty
+                row space silently closed scoring mid-event (reported live
+                2026-09-04). The label is now a plain, non-interactive span;
+                only the switch graphic itself is the button. */}
+            <div className="w-full flex items-center justify-between gap-3">
               <span
                 className={`font-semibold ${
                   isThisCategoryOpen
@@ -654,20 +653,31 @@ export default function AdminActiveControl() {
                 {isThisCategoryOpen ? "Scoring Open" : "Scoring Closed"}
               </span>
               {/* Hand-rolled switch (no Switch primitive in this UI kit
-                  yet) — track + sliding knob, 44px-tall hit area for
-                  tablet even though the visible track is slimmer. */}
-              <span
-                className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${
-                  isThisCategoryOpen ? "bg-emerald-500" : "bg-muted-foreground/30"
-                }`}
+                  yet) — the button's own padding gives it a real ~44px
+                  tablet touch target without the hit area spilling out
+                  into the label or the rest of the row. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isThisCategoryOpen}
+                aria-label={isThisCategoryOpen ? "Scoring Open" : "Scoring Closed"}
+                disabled={busy || !roundId || !categoryId}
+                onClick={toggleCategoryLock}
+                className="shrink-0 p-2 -m-2 disabled:opacity-50"
               >
                 <span
-                  className={`inline-block size-6 transform rounded-full bg-white shadow transition-transform ${
-                    isThisCategoryOpen ? "translate-x-7" : "translate-x-1"
+                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${
+                    isThisCategoryOpen ? "bg-emerald-500" : "bg-muted-foreground/30"
                   }`}
-                />
-              </span>
-            </button>
+                >
+                  <span
+                    className={`inline-block size-6 transform rounded-full bg-white shadow transition-transform ${
+                      isThisCategoryOpen ? "translate-x-7" : "translate-x-1"
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
 
             {/* Round, Category, Candidate, Go Live — all four together in
                 one row on tablet-width screens and wider (a real iPad in
