@@ -43,22 +43,30 @@ export default function CombinedResultsTable() {
   const sorted = [...results].sort(
     (a, b) => (a.candidateId ?? 0) - (b.candidateId ?? 0)
   );
-  const maxEvening = Math.max(
-    0,
-    ...sorted.map(
-      (r) =>
-        r.coronationCategories?.find((c) => c.categoryName === "Evening Wear")
-          ?.judgeScores?.length ?? 0
-    )
-  );
-  const maxSwimsuit = Math.max(
-    0,
-    ...sorted.map(
-      (r) =>
-        r.coronationCategories?.find((c) => c.categoryName === "Swimwear")
-          ?.judgeScores?.length ?? 0
-    )
-  );
+
+  // The judge columns for a coronation category — real names + ids, taken
+  // from whichever candidate row has the most entries (the backend returns
+  // judgeScores in a consistent per-category order for every row). Showing
+  // the judge's actual name matches the /admin/active Scoresheet and the
+  // Preliminaries Tally; a positional "J1" hid which judge a column was.
+  const judgesForCategory = (categoryName: string) =>
+    sorted
+      .map(
+        (r) =>
+          r.coronationCategories?.find((c) => c.categoryName === categoryName)
+            ?.judgeScores ?? []
+      )
+      .reduce((best, cur) => (cur.length > best.length ? cur : best), [] as {
+        judgeId: number;
+        judgeName: string;
+        score: number | null;
+      }[])
+      .map((j) => ({ judgeId: j.judgeId, judgeName: j.judgeName }));
+
+  const eveningJudges = judgesForCategory("Evening Wear");
+  const swimsuitJudges = judgesForCategory("Swimwear");
+  const maxEvening = eveningJudges.length;
+  const maxSwimsuit = swimsuitJudges.length;
 
   // A candidate missing an average in ANY of the 4 categories means her
   // combined total/rank on this screen reflects only part of the 100% —
@@ -133,10 +141,13 @@ export default function CombinedResultsTable() {
           <tr>
             <th className="border px-2 py-1 text-left">No</th>
             <th className="border px-2 py-1 text-left">Name</th>
-            {Array.from({ length: maxEvening }).map((_, i) => (
-              <th key={`eg-j${i}`} className="border px-2 py-1 text-left">{`J${
-                i + 1
-              }`}</th>
+            {eveningJudges.map((j, i) => (
+              <th
+                key={`eg-j${j.judgeId}-${i}`}
+                className="border px-2 py-1 text-left whitespace-nowrap"
+              >
+                {j.judgeName || `J${i + 1}`}
+              </th>
             ))}
             {maxEvening > 0 && (
               <>
@@ -144,10 +155,13 @@ export default function CombinedResultsTable() {
                 <th className="border px-2 py-1 text-left">W</th>
               </>
             )}
-            {Array.from({ length: maxSwimsuit }).map((_, i) => (
-              <th key={`sw-j${i}`} className="border px-2 py-1 text-left">{`J${
-                i + 1
-              }`}</th>
+            {swimsuitJudges.map((j, i) => (
+              <th
+                key={`sw-j${j.judgeId}-${i}`}
+                className="border px-2 py-1 text-left whitespace-nowrap"
+              >
+                {j.judgeName || `J${i + 1}`}
+              </th>
             ))}
             {maxSwimsuit > 0 && (
               <>
@@ -169,18 +183,19 @@ export default function CombinedResultsTable() {
               <tr key={r.candidateId}>
                 <td className="border px-2 py-1">{r.candidateId}</td>
                 <td className="border px-2 py-1">{r.candidateName}</td>
-                {Array.from({ length: maxEvening }).map((_, idx) => (
-                  <td
-                    key={`eg-${r.candidateId}-${idx}`}
-                    className="border px-2 py-1 text-right"
-                  >
-                    {eg?.judgeScores &&
-                    eg.judgeScores[idx] &&
-                    eg.judgeScores[idx].score != null
-                      ? eg.judgeScores[idx].score.toFixed(2)
-                      : "—"}
-                  </td>
-                ))}
+                {eveningJudges.map((j, idx) => {
+                  const cell =
+                    eg?.judgeScores?.find((js) => js.judgeId === j.judgeId) ??
+                    eg?.judgeScores?.[idx];
+                  return (
+                    <td
+                      key={`eg-${r.candidateId}-${j.judgeId}-${idx}`}
+                      className="border px-2 py-1 text-right"
+                    >
+                      {cell && cell.score != null ? cell.score.toFixed(2) : "—"}
+                    </td>
+                  );
+                })}
                 {maxEvening > 0 && (
                   <>
                     <td className="border px-2 py-1 text-right">
@@ -195,18 +210,19 @@ export default function CombinedResultsTable() {
                     </td>
                   </>
                 )}
-                {Array.from({ length: maxSwimsuit }).map((_, idx) => (
-                  <td
-                    key={`sw-${r.candidateId}-${idx}`}
-                    className="border px-2 py-1 text-right"
-                  >
-                    {sw?.judgeScores &&
-                    sw.judgeScores[idx] &&
-                    sw.judgeScores[idx].score != null
-                      ? sw.judgeScores[idx].score.toFixed(2)
-                      : "—"}
-                  </td>
-                ))}
+                {swimsuitJudges.map((j, idx) => {
+                  const cell =
+                    sw?.judgeScores?.find((js) => js.judgeId === j.judgeId) ??
+                    sw?.judgeScores?.[idx];
+                  return (
+                    <td
+                      key={`sw-${r.candidateId}-${j.judgeId}-${idx}`}
+                      className="border px-2 py-1 text-right"
+                    >
+                      {cell && cell.score != null ? cell.score.toFixed(2) : "—"}
+                    </td>
+                  );
+                })}
                 {maxSwimsuit > 0 && (
                   <>
                     <td className="border px-2 py-1 text-right">
