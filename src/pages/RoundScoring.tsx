@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +96,35 @@ function ScoreEntry({
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
+  // This card only renders once a judge actually opens it (expanded compact
+  // row, or the always-open featured/on-stage card) — at that moment the
+  // readout below shows category.minScore as a fallback for an unscored
+  // candidate (value == null). A judge who reads that number, decides it's
+  // already correct, and moves on without touching the slider was leaving
+  // that candidate with NO score saved at all — the display was faking a
+  // value that was never sent, indistinguishable on-screen from a real
+  // score. Reported live 2026-09-04.
+  //
+  // Fix: the instant this card is shown for a still-unscored candidate,
+  // save category.minScore for real — matching exactly what's already on
+  // screen, so "leave it alone" and "explicitly want the minimum" are the
+  // same outcome instead of one of them silently losing the score. Guarded
+  // to fire only once per mount (not on every re-render) and skipped
+  // entirely while disabled (locked/submitted category, or scoring not
+  // open) — never auto-save into a category the judge can't actually save
+  // into anyway. Both call sites key this component by candidate+category
+  // so it remounts (and this fires again) per candidate, since the
+  // featured/on-stage card reuses the same element across whichever
+  // candidate admin currently has live rather than unmounting between them.
+  const hasAutoSavedRef = useRef(false);
+  useEffect(() => {
+    if (value == null && !disabled && !hasAutoSavedRef.current) {
+      hasAutoSavedRef.current = true;
+      onChange(category.minScore);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div>
       <div className="flex items-center justify-center mb-3">
@@ -483,6 +512,7 @@ export default function RoundScoring() {
                   {expanded && selectedCategory && (
                     <CardContent className="pt-0 pb-4">
                       <ScoreEntry
+                        key={key}
                         value={value}
                         category={selectedCategory}
                         isSaving={isSaving}
@@ -533,6 +563,7 @@ export default function RoundScoring() {
                           </div>
                           {selectedCategory && (
                             <ScoreEntry
+                              key={key}
                               value={value}
                               category={selectedCategory}
                               isSaving={isSaving}
