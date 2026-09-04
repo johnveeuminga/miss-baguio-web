@@ -97,6 +97,11 @@ export function useRoundScoring(roundId: number) {
     );
   }
 
+  // Kept for anything still calling it, but no longer what the primary
+  // scoring screen uses — submission is now per-category (see
+  // submitCategory below), since a judge shouldn't have to wait for every
+  // category in the round to be scoreable/complete before submitting the
+  // one they've actually finished.
   async function submitRound() {
     await post(`/api/scoring/rounds/${roundId}/submit`, {}, token ?? undefined);
     await load();
@@ -111,6 +116,26 @@ export function useRoundScoring(roundId: number) {
     await load();
   }
 
+  // Submits ONE category independently — doesn't require any other
+  // category in the round to be scored or even scoreable.
+  async function submitCategory(categoryId: number) {
+    await post(
+      `/api/scoring/categories/${categoryId}/submit`,
+      {},
+      token ?? undefined
+    );
+    await load();
+  }
+
+  async function requestCategoryCorrection(categoryId: number) {
+    await post(
+      `/api/scoring/categories/${categoryId}/request-correction`,
+      {},
+      token ?? undefined
+    );
+    await load();
+  }
+
   const totalExpected = (data?.candidates.length ?? 0) * (data?.categories.length ?? 0);
   const totalFilled =
     data?.candidates.reduce(
@@ -118,6 +143,22 @@ export function useRoundScoring(roundId: number) {
       0
     ) ?? 0;
   const isComplete = totalExpected > 0 && totalFilled === totalExpected;
+
+  // Per-category filled/expected count, for the per-category Submit
+  // button's own completeness check (mirrors the round-wide totals above,
+  // just scoped to one category).
+  function categoryProgress(categoryId: number) {
+    const expected = data?.candidates.length ?? 0;
+    const filled =
+      data?.candidates.filter((c) =>
+        c.scores.some((s) => s.categoryId === categoryId && s.scoreValue != null)
+      ).length ?? 0;
+    return { filled, expected, isComplete: expected > 0 && filled === expected };
+  }
+
+  function categorySubmission(categoryId: number) {
+    return data?.categorySubmissions.find((cs) => cs.categoryId === categoryId) ?? null;
+  }
 
   return {
     data,
@@ -127,6 +168,10 @@ export function useRoundScoring(roundId: number) {
     saveScore,
     submitRound,
     requestCorrection,
+    submitCategory,
+    requestCategoryCorrection,
+    categoryProgress,
+    categorySubmission,
     totalExpected,
     totalFilled,
     isComplete,

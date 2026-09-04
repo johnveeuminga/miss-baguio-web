@@ -88,9 +88,19 @@ export type ScoringControlDto = {
   updatedAt: string;
 };
 
+export type MyCategorySubmissionStatusDto = {
+  categoryId: number;
+  isSubmitted: boolean;
+  hasUsedCorrection: boolean;
+  canRequestCorrection: boolean;
+};
+
 export type MyRoundScoresDto = {
   roundId: number;
   roundName: string;
+  // Derived aggregates ("every category submitted" / "any category used a
+  // correction") — kept for backwards compatibility. The real per-category
+  // state judges' UI should gate on is categorySubmissions below.
   isSubmitted: boolean;
   hasUsedCorrection: boolean;
   // False for Coronation Night — those scores are flashed live on the
@@ -99,4 +109,5 @@ export type MyRoundScoresDto = {
   canRequestCorrection: boolean;
   categories: RoundCategoryDto[];
   candidates: MyRoundCandidateScoresDto[];
+  categorySubmissions: MyCategorySubmissionStatusDto[];
 };
