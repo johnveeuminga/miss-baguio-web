@@ -82,7 +82,7 @@ export default function PreliminaryResultsTable({
     });
     const anyPlaced = results.some(isPlaced);
     return (
-      <div className="printable">
+      <div className="printable" data-print-mode="announce">
         <h3 className="mb-2 text-base font-semibold">
           Preliminaries — Standings
         </h3>
@@ -171,7 +171,7 @@ export default function PreliminaryResultsTable({
   });
 
   return (
-    <div className="printable space-y-8">
+    <div className="printable space-y-8" data-print-mode="detailed">
       {/* One scoresheet per category, stacked (Creative Costume under Q&A) —
           each mirrors the /admin/active Scoresheet so the print matches the
           on-screen look the panel is used to. */}
