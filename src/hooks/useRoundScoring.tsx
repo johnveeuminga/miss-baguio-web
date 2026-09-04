@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { get, post } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
 import type { MyRoundScoresDto } from "@/types/scoring";
 
 // lib/api.ts's handleResponse throws the raw JSON error body (e.g.
@@ -38,25 +39,88 @@ export function useRoundScoring(roundId: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = (await get(
-        `/api/scoring/rounds/${roundId}/my-scores`,
-        token ?? undefined
-      )) as MyRoundScoresDto;
-      setData(res);
-    } catch (err) {
-      setError(extractErrorMessage(err, "Failed to load scores"));
-    } finally {
-      setLoading(false);
-    }
-  }, [roundId, token]);
+  // Keys ("<candidateId>-<categoryId>") of scores this judge has changed
+  // whose debounced POST hasn't landed yet. A silent background refresh
+  // (below) must not overwrite these with the server's older value — see
+  // the merge in load().
+  const pendingSavesRef = useRef<
+    Map<string, { candidateId: number; categoryId: number; scoreValue: number }>
+  >(new Map());
+
+  // `silent` skips the loading-spinner flip — used by the live SignalR
+  // refresh below, which must NOT yank a mid-scoring judge's screen to a
+  // full-page <LoadingView> every time any judge submits a score. The
+  // optimistic local scores stay put; only the authoritative snapshot
+  // (submission/lock state especially) is reconciled underneath.
+  const load = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setLoading(true);
+      setError(null);
+      try {
+        const res = (await get(
+          `/api/scoring/rounds/${roundId}/my-scores`,
+          token ?? undefined
+        )) as MyRoundScoresDto;
+        // Keep any score the judge is still editing (pending debounced
+        // save) — the fresh snapshot has the pre-edit value for it, and
+        // letting that win would make their number visibly jump back.
+        const pending = pendingSavesRef.current;
+        setData(
+          pending.size === 0
+            ? res
+            : {
+                ...res,
+                candidates: res.candidates.map((c) => ({
+                  ...c,
+                  scores: c.scores.map((s) => {
+                    const p = pending.get(`${c.candidateId}-${s.categoryId}`);
+                    return p ? { ...s, scoreValue: p.scoreValue } : s;
+                  }),
+                })),
+              }
+        );
+      } catch (err) {
+        // A silent background refresh that fails shouldn't blow away a
+        // working screen with an error view — the next event or the
+        // reconnect handler will try again.
+        if (!silent) setError(extractErrorMessage(err, "Failed to load scores"));
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [roundId, token]
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Live-refresh the judge's own scoresheet — critically, the per-category
+  // submission/lock state. Without this, a judge who has one category open
+  // (e.g. Creative Costume, locked after they submitted it) and is then
+  // auto-jumped to another category when the admin switches the active one
+  // keeps a STALE categorySubmissions snapshot: Q&A can show as locked
+  // even though this judge never submitted it, until they hard-refresh.
+  //
+  // "ScoreUpdated" also fires on submit/correction (server broadcasts it
+  // from SubmitCategory / RequestCategoryCorrection); "ScoringControl
+  // Updated" fires when the admin opens/closes a category. Both are cheap
+  // to react to here — one extra my-scores GET — and every other live
+  // screen (AdminActiveControl, Scoresheet, Top7ReadinessCard) already
+  // listens the same way. A reconnect refetch covers scores/locks that
+  // changed while the socket was briefly down on venue WiFi.
+  const hubConnection = useScoringHubConnection(token);
+  useEffect(() => {
+    if (!hubConnection) return;
+    const onChanged = () => void load({ silent: true });
+    hubConnection.on("ScoreUpdated", onChanged);
+    hubConnection.on("ScoringControlUpdated", onChanged);
+    hubConnection.onreconnected(onChanged);
+    return () => {
+      hubConnection.off("ScoreUpdated", onChanged);
+      hubConnection.off("ScoringControlUpdated", onChanged);
+    };
+  }, [hubConnection, load]);
 
   // Optimistic local update so the input doesn't visually revert while the
   // save request is in flight — reconciled against the server's response
@@ -121,7 +185,8 @@ export function useRoundScoring(roundId: number) {
   // silently dropped when its 300ms timer hasn't fired yet.
   const DEBOUNCE_MS = 300;
   const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const pendingSavesRef = useRef<Map<string, { candidateId: number; categoryId: number; scoreValue: number }>>(new Map());
+  // pendingSavesRef is declared at the top of the hook — the silent live
+  // refresh in load() needs it too, to avoid clobbering an in-flight edit.
 
   // savingKeys mirrors which (candidate, category) pairs currently have a
   // save in flight or pending — RoundScoring.tsx's per-slider spinner reads

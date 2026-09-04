@@ -305,11 +305,42 @@ export default function AdminActiveControl() {
     void loadInitial();
   }, [loadInitial]);
 
-  // Default (and reset) category whenever the round changes
+  // Seed the Round + Category pickers from whatever is ACTUALLY open for
+  // judges right now (GET /api/scoring/control), once, on first load. Was
+  // missing entirely — the pickers only ever defaulted to rounds[0] /
+  // categories[0] (= Q&A), so after any page reload the "Scoring Open"
+  // switch showed "Closed" and pointed at the wrong category even while a
+  // different one was genuinely live, and toggling it acted on Q&A instead
+  // of what was on stage. After this initial seed the admin drives the
+  // pickers; live changes are reflected by the status text, not by moving
+  // their selection out from under them.
+  const seededFromControl = useRef(false);
+  useEffect(() => {
+    if (seededFromControl.current) return;
+    if (rounds.length === 0 || !scoringControl) return;
+    seededFromControl.current = true;
+    if (
+      scoringControl.isScoringOpen &&
+      scoringControl.activeRoundId != null
+    ) {
+      setRoundId(scoringControl.activeRoundId);
+      setCategoryId(scoringControl.activeCategoryId ?? null);
+    }
+  }, [rounds, scoringControl]);
+
+  // When the admin switches ROUND, drop to that round's first category —
+  // but only if the current selection isn't valid for the new round.
+  // Keyed on roundId (a primitive), NOT selectedRound (a fresh object
+  // every render / every rounds refetch) — the old version fired on every
+  // background reload and kept slamming the category back to categories[0].
   useEffect(() => {
     if (!selectedRound) return;
-    setCategoryId(selectedRound.categories[0]?.id ?? null);
-  }, [selectedRound]);
+    const stillValid = selectedRound.categories.some((c) => c.id === categoryId);
+    if (!stillValid) {
+      setCategoryId(selectedRound.categories[0]?.id ?? null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- react only to a real round change, not to categoryId edits or rounds refetches
+  }, [roundId]);
 
   const fetchSnapshot = useCallback(
     async (sessionId: string) => {
