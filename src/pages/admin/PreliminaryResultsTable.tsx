@@ -55,23 +55,35 @@ export default function PreliminaryResultsTable() {
 
   const sorted = [...results].sort((a, b) => a.candidateNo - b.candidateNo);
 
-  // Category list/order + per-category judge-column count come from
-  // whichever candidate row happens to have the most judge entries for
-  // that category — every row carries the same category set (the backend
-  // fills every category for every candidate, blank cells and all), so
-  // the first row's shape is representative.
-  const categoryDefs = (sorted[0]?.categoryScores ?? []).map((c) => ({
-    categoryId: c.categoryId,
-    categoryName: c.categoryName,
-    judgeCount: Math.max(
-      0,
-      ...sorted.map(
-        (r) =>
-          r.categoryScores.find((rc) => rc.categoryId === c.categoryId)
-            ?.judgeScores?.length ?? 0
-      )
-    ),
-  }));
+  // Category list/order + the judge columns for each category. The backend
+  // returns judgeScores in a consistent order for every candidate row of a
+  // given category (claim order for capped categories, judge-id order
+  // otherwise — see ResultsController.GetFullPreliminaryTable), so column
+  // index N is the same judge in every row. Take the judge list (real
+  // names + ids, not just a count) from whichever row has the most entries
+  // for that category, so a candidate nobody scored yet doesn't shrink the
+  // header.
+  const categoryDefs = (sorted[0]?.categoryScores ?? []).map((c) => {
+    const judges =
+      sorted
+        .map(
+          (r) =>
+            r.categoryScores.find((rc) => rc.categoryId === c.categoryId)
+              ?.judgeScores ?? []
+        )
+        .reduce((best, cur) => (cur.length > best.length ? cur : best), [] as {
+          judgeId: number;
+          judgeName: string;
+          score: number | null;
+        }[])
+        .map((j) => ({ judgeId: j.judgeId, judgeName: j.judgeName }));
+    return {
+      categoryId: c.categoryId,
+      categoryName: c.categoryName,
+      judges,
+      judgeCount: judges.length,
+    };
+  });
 
   return (
     <div className="overflow-auto printable">
@@ -105,11 +117,13 @@ export default function PreliminaryResultsTable() {
             <th className="border px-2 py-1 text-left">Name</th>
             {categoryDefs.map((cat) => (
               <>
-                {Array.from({ length: cat.judgeCount }).map((_, i) => (
+                {cat.judges.map((j, i) => (
                   <th
-                    key={`j-${cat.categoryId}-${i}`}
-                    className="border px-2 py-1 text-left"
-                  >{`J${i + 1}`}</th>
+                    key={`j-${cat.categoryId}-${j.judgeId}-${i}`}
+                    className="border px-2 py-1 text-left whitespace-nowrap"
+                  >
+                    {j.judgeName || `J${i + 1}`}
+                  </th>
                 ))}
                 <th
                   key={`avg-${cat.categoryId}`}
@@ -138,18 +152,25 @@ export default function PreliminaryResultsTable() {
                 );
                 return (
                   <>
-                    {Array.from({ length: cat.judgeCount }).map((_, idx) => (
-                      <td
-                        key={`jc-${r.candidateId}-${cat.categoryId}-${idx}`}
-                        className="border px-2 py-1 text-right"
-                      >
-                        {cs?.judgeScores &&
-                        cs.judgeScores[idx] &&
-                        cs.judgeScores[idx].score != null
-                          ? cs.judgeScores[idx].score!.toFixed(2)
-                          : "—"}
-                      </td>
-                    ))}
+                    {cat.judges.map((j, idx) => {
+                      // Align by judgeId, not array position — the backend
+                      // order is consistent per category, but matching on
+                      // id is robust even if a row is ever short an entry.
+                      const cell =
+                        cs?.judgeScores?.find(
+                          (js) => js.judgeId === j.judgeId
+                        ) ?? cs?.judgeScores?.[idx];
+                      return (
+                        <td
+                          key={`jc-${r.candidateId}-${cat.categoryId}-${j.judgeId}-${idx}`}
+                          className="border px-2 py-1 text-right"
+                        >
+                          {cell && cell.score != null
+                            ? cell.score.toFixed(2)
+                            : "—"}
+                        </td>
+                      );
+                    })}
                     <td
                       key={`avgc-${r.candidateId}-${cat.categoryId}`}
                       className="border px-2 py-1 text-right"

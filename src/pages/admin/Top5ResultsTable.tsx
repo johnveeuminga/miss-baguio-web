@@ -79,16 +79,15 @@ export default function Top5ResultsTable() {
             {judges.map((j, i) => (
               <th
                 key={`j-${j.judgeId}`}
-                className="border px-2 py-1"
+                className="border px-2 py-1 whitespace-nowrap"
                 title={j.judgeName}
               >
-                {/* Was `J${j.judgeId}` — the raw database id, which starts
-                    at 3 (ids 1-2 are Admin/Viewer), so this showed
-                    "J3, J4, ... J11" instead of "J1, J2, ... J9". Judges
-                    are already sorted by id here, so a 1-based position in
-                    that order gives the display number judges actually
-                    expect. */}
-                {`J${i + 1}`}
+                {/* Show the judge's actual name (FullName, e.g. "Judge 3")
+                    — matching the /admin/active Scoresheet and the
+                    Preliminaries Tally. A derived 1-based position ("J1")
+                    hid which real judge a column belonged to; falls back
+                    to that only if the name is somehow missing. */}
+                {j.judgeName || `J${i + 1}`}
               </th>
             ))}
           </tr>
