@@ -12,6 +12,7 @@ import AdminActiveControl from "./components/AdminActiveControl";
 import ResultsCombined from "./pages/admin/ResultsCombined";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { PublicRoute } from "./components/PublicRoute";
+import LandscapeGate from "./components/LandscapeGate";
 import HomeRedirect from "./components/HomeRedirect";
 import Header from "./components/Header";
 import { useEffect, useState } from "react";
@@ -61,7 +62,9 @@ function AppRouter() {
             path="/judge/home"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <JudgeHome />
+                <LandscapeGate>
+                  <JudgeHome />
+                </LandscapeGate>
               </ProtectedRoute>
             }
           />
@@ -69,7 +72,9 @@ function AppRouter() {
             path="/finals-scoring"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <RoundScoring />
+                <LandscapeGate>
+                  <RoundScoring />
+                </LandscapeGate>
               </ProtectedRoute>
             }
           />
@@ -77,7 +82,9 @@ function AppRouter() {
             path="/scoring/:roundId"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <RoundScoring />
+                <LandscapeGate>
+                  <RoundScoring />
+                </LandscapeGate>
               </ProtectedRoute>
             }
           />
@@ -85,7 +92,9 @@ function AppRouter() {
             path="/judge/top5"
             element={
               <ProtectedRoute requiredRole="Judge">
-                <Top7Ranking />
+                <LandscapeGate>
+                  <Top7Ranking />
+                </LandscapeGate>
               </ProtectedRoute>
             }
           />

@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { get, post } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,17 +64,6 @@ export default function Top7Ranking() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
-  const bodyOverflowRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    return () => {
-      // restore body overflow if component unmounts while dragging
-      if (bodyOverflowRef.current !== null) {
-        document.body.style.overflow = bodyOverflowRef.current;
-        bodyOverflowRef.current = null;
-      }
-    };
-  }, []);
 
   async function load() {
     setLoading(true);
@@ -133,6 +123,24 @@ export default function Top7Ranking() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
+
+  // Live-refresh when the admin opens/closes Top 7 (or on reconnect) — a
+  // judge who opened this page early got 403s and an error view; without
+  // this they'd sit on that until a manual reload. Also picks up a
+  // People's-Choice change that reshuffles the candidate pool.
+  const hubConnection = useScoringHubConnection(token);
+  useEffect(() => {
+    if (!hubConnection) return;
+    const onChanged = () => void load();
+    hubConnection.on("Top7Opened", onChanged);
+    hubConnection.on("Top7Closed", onChanged);
+    hubConnection.onreconnected(onChanged);
+    return () => {
+      hubConnection.off("Top7Opened", onChanged);
+      hubConnection.off("Top7Closed", onChanged);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubConnection]);
 
   // TODO(2026 Top 7): placements 4-7 aren't confirmed with the Executive
   // Committee yet (last year's format only went to 5th/Malikhain). Mirrors
@@ -361,7 +369,13 @@ export default function Top7Ranking() {
 
       <DndContext
         sensors={sensors}
-        autoScroll={false}
+        // Auto-scroll the page while dragging near the top/bottom edge —
+        // in tablet portrait the 7 stacked slots push the candidate strip
+        // far below the fold, so a judge dragging the lowest-ranked
+        // candidate up to slot 1 needs the page to follow. Page scroll is
+        // NOT frozen during drag (it used to be, which trapped the judge
+        // mid-list with the slots off-screen and no way to reach them).
+        autoScroll={{ threshold: { x: 0, y: 0.2 }, acceleration: 12 }}
         onDragStart={(e: DragStartEvent) => {
           const id = e.active.id?.toString() ?? null;
           setActiveId(id);
@@ -378,29 +392,11 @@ export default function Top7Ranking() {
           } else {
             setActiveWidth(null);
           }
-          // disable page scroll while dragging
-          try {
-            bodyOverflowRef.current = document.body.style.overflow ?? null;
-            document.body.style.overflow = "hidden";
-          } catch {
-            /* ignore */
-          }
         }}
         onDragEnd={(event: DragEndEvent) => {
           const { active, over } = event;
           setActiveId(null);
           setActiveWidth(null);
-          // restore page scroll
-          try {
-            if (bodyOverflowRef.current !== null) {
-              document.body.style.overflow = bodyOverflowRef.current;
-            } else {
-              document.body.style.overflow = "";
-            }
-            bodyOverflowRef.current = null;
-          } catch {
-            /* ignore */
-          }
           if (!over) return;
           const activeIdStr = active.id?.toString();
           const overId = over.id?.toString();
@@ -448,16 +444,6 @@ export default function Top7Ranking() {
         onDragCancel={() => {
           setActiveId(null);
           setActiveWidth(null);
-          try {
-            if (bodyOverflowRef.current !== null) {
-              document.body.style.overflow = bodyOverflowRef.current;
-            } else {
-              document.body.style.overflow = "";
-            }
-            bodyOverflowRef.current = null;
-          } catch {
-            /* ignore */
-          }
         }}
       >
         <div className="space-y-6">

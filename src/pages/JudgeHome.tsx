@@ -39,6 +39,7 @@ export default function JudgeHome() {
   const user = useAuthStore((s) => s.user);
   const [morning, setMorning] = useState<RoundStatus>(emptyStatus);
   const [coronation, setCoronation] = useState<RoundStatus>(emptyStatus);
+  const [isTop7Open, setIsTop7Open] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   async function fetchSession(roundId: number): Promise<ScoringSessionDto | null> {
@@ -67,15 +68,24 @@ export default function JudgeHome() {
     setMorning((s) => ({ ...s, loading: true }));
     setCoronation((s) => ({ ...s, loading: true }));
     try {
-      const [morningSession, coronationSession, morningScores, coronationScores] =
-        await Promise.all([
-          fetchSession(MORNING_ROUND_ID),
-          fetchSession(CORONATION_ROUND_ID),
-          fetchMyScores(MORNING_ROUND_ID),
-          fetchMyScores(CORONATION_ROUND_ID),
-        ]);
+      const [
+        morningSession,
+        coronationSession,
+        morningScores,
+        coronationScores,
+        control,
+      ] = await Promise.all([
+        fetchSession(MORNING_ROUND_ID),
+        fetchSession(CORONATION_ROUND_ID),
+        fetchMyScores(MORNING_ROUND_ID),
+        fetchMyScores(CORONATION_ROUND_ID),
+        get("/api/scoring/control", token ?? undefined).catch(() => null),
+      ]);
       setMorning({ session: morningSession, myScores: morningScores, loading: false });
       setCoronation({ session: coronationSession, myScores: coronationScores, loading: false });
+      setIsTop7Open(
+        !!(control as { isTop7Open?: boolean } | null)?.isTop7Open
+      );
     } catch (err) {
       setMorning({ session: null, myScores: null, loading: false });
       setCoronation({ session: null, myScores: null, loading: false });
@@ -104,6 +114,12 @@ export default function JudgeHome() {
       .build();
 
     conn.on("ActiveCandidateChanged", () => void load());
+    // Admin opened/closed Top 7 ranking — the Top 7 card below flips
+    // between "locked" and "open" off this. Nothing else notifies the
+    // judge; without it the card stays "Available once the admin opens…"
+    // even after Top 7 is live.
+    conn.on("Top7Opened", () => setIsTop7Open(true));
+    conn.on("Top7Closed", () => setIsTop7Open(false));
     conn.onreconnected(() => void load());
 
     void conn.start();
@@ -194,8 +210,16 @@ export default function JudgeHome() {
           <StageCard
             icon={Trophy}
             title="Top 7"
-            statusLabel="Rank the finalists"
-            description="Available once the admin opens the final ranking round."
+            active={isTop7Open}
+            statusLabel={
+              isTop7Open ? "Open — rank the finalists" : "Not open yet"
+            }
+            description={
+              isTop7Open
+                ? undefined
+                : "Available once the admin opens the final ranking round."
+            }
+            isLocked={!isTop7Open}
             onOpen={() => navigate("/judge/top5")}
           />
         </div>
