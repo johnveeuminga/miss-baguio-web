@@ -182,7 +182,8 @@ export default function RoundScoring() {
     loading,
     error,
     reload,
-    saveScore,
+    debouncedSaveScore,
+    savingKeys,
     submitCategory,
     requestCategoryCorrection,
     categoryProgress,
@@ -235,7 +236,6 @@ export default function RoundScoring() {
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [confirmCorrectionOpen, setConfirmCorrectionOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [savingKey, setSavingKey] = useState<string | null>(null);
 
   // The one category admin currently has open for scoring (per the
   // Executive Committee: avoid mis-scoring the wrong category from a
@@ -285,18 +285,16 @@ export default function RoundScoring() {
   // API would reject it too, not just a client-side nicety.
   const scoringBlocked = activeCategoryId == null || categoryId !== activeCategoryId;
 
-  async function handleScoreChange(candidateId: number, value: number) {
+  function handleScoreChange(candidateId: number, value: number) {
     if (!categoryId || locked || scoringBlocked) return;
-    const key = `${candidateId}-${categoryId}`;
-    setSavingKey(key);
-    try {
-      await saveScore(candidateId, categoryId, value);
-    } catch (err) {
+    // Debounced: the visible number updates immediately (inside
+    // debouncedSaveScore), but the actual POST is coalesced to fire once
+    // ~300ms after the judge stops dragging, instead of once per drag
+    // frame — see useRoundScoring's debouncedSaveScore doc comment for why.
+    debouncedSaveScore(candidateId, categoryId, value, (err) => {
       toast.error(extractErrorMessage(err, "Failed to save score"));
-      await reload();
-    } finally {
-      setSavingKey((k) => (k === key ? null : k));
-    }
+      void reload();
+    });
   }
 
   async function handleSubmit() {
@@ -441,7 +439,7 @@ export default function RoundScoring() {
               const value = score?.scoreValue ?? null;
               const expanded = expandedCandidateId === candidate.candidateId;
               const key = `${candidate.candidateId}-${categoryId}`;
-              const isSaving = savingKey === key;
+              const isSaving = savingKeys.has(key);
 
               return (
                 <Card key={candidate.candidateId}>
@@ -506,7 +504,7 @@ export default function RoundScoring() {
                     const score = featured.scores.find((s) => s.categoryId === categoryId);
                     const value = score?.scoreValue ?? null;
                     const key = `${featured.candidateId}-${categoryId}`;
-                    const isSaving = savingKey === key;
+                    const isSaving = savingKeys.has(key);
                     return (
                       <Card className="mb-4 border-primary ring-1 ring-primary/40">
                         <CardContent className="pt-4">
