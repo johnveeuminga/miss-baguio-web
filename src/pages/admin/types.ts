@@ -1,3 +1,10 @@
+// Results-page print modes. "detailed" = the tabulation-committee view
+// (every judge's raw score, per-category Avg + weighted contribution, the
+// 20/20 split). "announce" = the emcee view: just Rank, #, Name, Barangay,
+// Total — a placement sheet a host can read on air without decoding any
+// scoring math.
+export type ResultsMode = "detailed" | "announce";
+
 export type PerCategoryScoreDto = {
   categoryId: number;
   categoryName: string;

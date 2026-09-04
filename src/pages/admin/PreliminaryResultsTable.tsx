@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { get } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
-import type { CandidateFullTableDto } from "./types";
+import type { CandidateFullTableDto, ResultsMode } from "./types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,7 +24,11 @@ import { cn } from "@/lib/utils";
  * Category.ExpectedJudgeCount (e.g. Q&A judged by only 3) shows exactly
  * those columns, not a fixed 9.
  */
-export default function PreliminaryResultsTable() {
+export default function PreliminaryResultsTable({
+  mode = "detailed",
+}: {
+  mode?: ResultsMode;
+}) {
   const token = useAuthStore((s) => s.token);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CandidateFullTableDto[]>([]);
@@ -60,6 +64,63 @@ export default function PreliminaryResultsTable() {
   }
 
   const sorted = [...results].sort((a, b) => a.candidateNo - b.candidateNo);
+
+  // Announce view — a placement sheet for the host: ranked order, candidate
+  // number, name, Preliminaries Total, Rank. No judge columns, no weighting
+  // math. Unranked candidates (nobody scored them yet) fall to the bottom.
+  if (mode === "announce") {
+    const ranked = [...results].sort((a, b) => {
+      const ra = a.rank ?? Number.POSITIVE_INFINITY;
+      const rb = b.rank ?? Number.POSITIVE_INFINITY;
+      if (ra !== rb) return ra - rb;
+      return a.candidateNo - b.candidateNo;
+    });
+    return (
+      <div className="printable">
+        <h3 className="mb-2 text-base font-semibold">
+          Preliminaries — Standings
+        </h3>
+        <div className="overflow-auto">
+          <table
+            className="min-w-full border-collapse table-auto text-base"
+            style={{ borderColor: "#000" }}
+          >
+            <thead>
+              <tr>
+                <th className="border px-3 py-2 text-left">Place</th>
+                <th className="border px-3 py-2 text-left">#</th>
+                <th className="border px-3 py-2 text-left">Candidate</th>
+                <th className="border px-3 py-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r) => (
+                <tr
+                  key={r.candidateId}
+                  className={cn(
+                    r.rank != null && r.rank <= 7 ? "font-bold" : ""
+                  )}
+                >
+                  <td className="border px-3 py-2">
+                    {r.rank ?? "—"}
+                    {r.rank != null && r.rank <= 7 ? " ★" : ""}
+                  </td>
+                  <td className="border px-3 py-2">{r.candidateNo}</td>
+                  <td className="border px-3 py-2">{r.candidateName}</td>
+                  <td className="border px-3 py-2 text-right">
+                    {r.weightedTotal != null ? r.weightedTotal.toFixed(2) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          ★ = current Top 7. Total is Q&amp;A + Creative Costume combined.
+        </p>
+      </div>
+    );
+  }
 
   // Category list/order + the judge columns for each category. The backend
   // returns judgeScores in a consistent order for every candidate row of a
