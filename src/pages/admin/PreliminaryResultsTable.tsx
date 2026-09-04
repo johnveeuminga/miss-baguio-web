@@ -195,7 +195,13 @@ export default function PreliminaryResultsTable({
                       key={`h-${cat.categoryId}-${j.judgeId}-${i}`}
                       className="border px-2 py-1 text-right whitespace-nowrap"
                     >
-                      {j.judgeName || `J${i + 1}`}
+                      {/* Real name on screen, J1..Jn on paper — see the note
+                          in CombinedResultsTable: judge-name headers are what
+                          push a wide scoresheet off the page. */}
+                      <span className="screen-only">
+                        {j.judgeName || `J${i + 1}`}
+                      </span>
+                      <span className="print-only">{`J${i + 1}`}</span>
                     </th>
                   ))}
                   <th className="border px-2 py-1 text-right">Avg</th>

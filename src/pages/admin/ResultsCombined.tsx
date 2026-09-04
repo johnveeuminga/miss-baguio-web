@@ -164,19 +164,26 @@ export default function ResultsCombined() {
         </CardContent>
       </Card>
 
-      {/* Print rules. The Detailed committee sheets get very wide once
-          judges are seated — Preliminaries is No/Name + a column per judge
-          + Avg + W (13 columns at a 9-judge panel), and the Combined sheet
-          is roughly double that (two rounds x per-judge columns + Avg/W
-          each). Portrait A4 can't hold either without squeezing the
-          candidate names to nothing, so Detailed prints landscape at a
-          tightened cell size. Announce stays portrait: it's only 5 columns
-          and the emcee reads it at arm's length, so it wants big type, not
-          small. Scoped via .printable[data-print-mode] rather than a blanket
-          @page so the two modes can't drag each other around. */}
+      {/* Print rules. Both Detailed views (Preliminaries and Combined) are
+          now stacked per-category scoresheets — No/Name + a column per
+          judge + Avg + W, ~13 columns at a 9-judge panel — rather than one
+          wide side-by-side grid. That keeps every sheet legible at the same
+          print size regardless of how many judges are seated; a single wide
+          table only fit a full 9-judge Combined sheet by shrinking to ~7px,
+          which nobody could actually read off a printed page. Landscape
+          still gives more breathing room than portrait, so Detailed keeps
+          it. Announce stays portrait: 5 columns, read at arm's length by
+          the emcee, wants big type. Scoped via .printable[data-print-mode]
+          rather than a blanket @page so the two modes can't drag each other
+          around. */}
       <style>{`@media print { body * { visibility: hidden; } .printable, .printable * { visibility: visible; } .printable { position: absolute; left: 0; top: 0; width: 100%; } table { border: 1px solid #000; border-collapse: collapse; } th, td { border: 1px solid #000 !important; color: #000 !important; } thead { display: table-header-group; } .printable section { break-inside: avoid; } .printable section + section { margin-top: 1.5rem; } }
-@media print { .printable[data-print-mode="detailed"] table { width: 100%; table-layout: fixed; font-size: 9px; } .printable[data-print-mode="detailed"] th, .printable[data-print-mode="detailed"] td { padding: 1px 3px; overflow: hidden; text-overflow: ellipsis; } /* Name is the only column that needs room for real text; everything else is a 2-decimal number or a small integer, so give the numeric columns a hard narrow width and let Name take the slack. */ .printable[data-print-mode="detailed"] th:not(:nth-child(2)), .printable[data-print-mode="detailed"] td:not(:nth-child(2)) { width: 2.6em; } .printable[data-print-mode="detailed"] th:nth-child(2), .printable[data-print-mode="detailed"] td:nth-child(2) { width: auto; white-space: nowrap; } }
-@media print { .printable[data-print-mode="announce"] { font-size: 13px; } }`}</style>
+@media print { .printable[data-print-mode="detailed"] table { width: 100%; max-width: 100%; min-width: 0 !important; table-layout: auto; font-size: 10px; } .printable[data-print-mode="detailed"] th, .printable[data-print-mode="detailed"] td { padding: 1px 4px; word-break: normal; } .printable[data-print-mode="detailed"] thead th { white-space: normal !important; overflow-wrap: anywhere; line-height: 1.15; } .printable[data-print-mode="detailed"] tbody td:nth-child(2) { white-space: nowrap; } }
+@media print { .printable[data-print-mode="announce"] { font-size: 13px; } }
+/* Swap long on-screen header labels for short printed ones. display (not
+   visibility) so the hidden variant takes up no width at all — the whole
+   point is to stop those two columns from eating the page. */
+.print-only { display: none; }
+@media print { .screen-only { display: none !important; } .print-only { display: inline !important; } }`}</style>
       {/* Detailed needs landscape; announce must stay portrait. @page can't
           be conditioned on a selector, so the size is swapped by injecting
           the rule that matches the mode actually being printed. */}
