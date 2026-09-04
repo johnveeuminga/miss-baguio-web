@@ -83,7 +83,7 @@ export default function CombinedResultsTable({
     });
     const anyPlaced = results.some(isPlaced);
     return (
-      <div className="printable">
+      <div className="printable" data-print-mode="announce">
         <h3 className="mb-2 text-base font-semibold">Overall Standings</h3>
         {!anyPlaced ? (
           <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
@@ -189,7 +189,7 @@ export default function CombinedResultsTable({
   });
 
   return (
-    <div className="overflow-auto printable">
+    <div className="overflow-auto printable" data-print-mode="detailed">
       {isPartial && (
         <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
           <AlertTriangle className="size-4 shrink-0 mt-0.5" />

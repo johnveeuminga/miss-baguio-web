@@ -164,7 +164,27 @@ export default function ResultsCombined() {
         </CardContent>
       </Card>
 
-      <style>{`@media print { body * { visibility: hidden; } .printable, .printable * { visibility: visible; } .printable { position: absolute; left: 0; top: 0; width: 100%; } table { border: 1px solid #000; border-collapse: collapse; } th, td { border: 1px solid #000 !important; color: #000 !important; } thead { display: table-header-group; } .printable section { break-inside: avoid; } .printable section + section { margin-top: 1.5rem; } }`}</style>
+      {/* Print rules. The Detailed committee sheets get very wide once
+          judges are seated — Preliminaries is No/Name + a column per judge
+          + Avg + W (13 columns at a 9-judge panel), and the Combined sheet
+          is roughly double that (two rounds x per-judge columns + Avg/W
+          each). Portrait A4 can't hold either without squeezing the
+          candidate names to nothing, so Detailed prints landscape at a
+          tightened cell size. Announce stays portrait: it's only 5 columns
+          and the emcee reads it at arm's length, so it wants big type, not
+          small. Scoped via .printable[data-print-mode] rather than a blanket
+          @page so the two modes can't drag each other around. */}
+      <style>{`@media print { body * { visibility: hidden; } .printable, .printable * { visibility: visible; } .printable { position: absolute; left: 0; top: 0; width: 100%; } table { border: 1px solid #000; border-collapse: collapse; } th, td { border: 1px solid #000 !important; color: #000 !important; } thead { display: table-header-group; } .printable section { break-inside: avoid; } .printable section + section { margin-top: 1.5rem; } }
+@media print { .printable[data-print-mode="detailed"] table { width: 100%; table-layout: fixed; font-size: 9px; } .printable[data-print-mode="detailed"] th, .printable[data-print-mode="detailed"] td { padding: 1px 3px; overflow: hidden; text-overflow: ellipsis; } /* Name is the only column that needs room for real text; everything else is a 2-decimal number or a small integer, so give the numeric columns a hard narrow width and let Name take the slack. */ .printable[data-print-mode="detailed"] th:not(:nth-child(2)), .printable[data-print-mode="detailed"] td:not(:nth-child(2)) { width: 2.6em; } .printable[data-print-mode="detailed"] th:nth-child(2), .printable[data-print-mode="detailed"] td:nth-child(2) { width: auto; white-space: nowrap; } }
+@media print { .printable[data-print-mode="announce"] { font-size: 13px; } }`}</style>
+      {/* Detailed needs landscape; announce must stay portrait. @page can't
+          be conditioned on a selector, so the size is swapped by injecting
+          the rule that matches the mode actually being printed. */}
+      {modeApplies && mode === "detailed" ? (
+        <style>{`@page { size: A4 landscape; margin: 8mm; }`}</style>
+      ) : (
+        <style>{`@page { size: A4 portrait; margin: 10mm; }`}</style>
+      )}
     </div>
   );
 }
