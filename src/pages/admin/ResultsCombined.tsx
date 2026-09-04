@@ -9,6 +9,7 @@ import PreliminaryResultsTable from "./PreliminaryResultsTable";
 import Top5ResultsTable from "./Top5ResultsTable";
 import Top5CandidatesTable from "./Top5CandidatesTable";
 import SpecialAwardsTable from "./SpecialAwardsTable";
+import type { ResultsMode } from "./types";
 
 // 2026 "Road to Top 7" naming — these views used to be labeled for the old
 // Preliminary/Finals + Top 5 format. The underlying endpoints/data are
@@ -51,9 +52,16 @@ const VIEWS = [
 
 type ViewId = (typeof VIEWS)[number]["id"];
 
+// Which views actually change between Detailed and Announce. The Top 7 /
+// Final Titles / Special Awards tables are already just placement lists —
+// nothing to strip — so the toggle is hidden while they're selected.
+const MODE_AWARE_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary"]);
+
 export default function ResultsCombined() {
   const [view, setView] = useState<ViewId>("combined");
+  const [mode, setMode] = useState<ResultsMode>("detailed");
   const activeView = VIEWS.find((v) => v.id === view)!;
+  const modeApplies = MODE_AWARE_VIEWS.has(view);
 
   function handlePrint() {
     window.print();
@@ -71,12 +79,46 @@ export default function ResultsCombined() {
           </Link>
           <h1 className="text-xl font-bold">Results</h1>
         </div>
-        <Button onClick={handlePrint} variant="outline" size="sm">
-          <Printer className="size-4" /> Print
-        </Button>
+        <div className="flex items-center gap-2">
+          {modeApplies && (
+            // Detailed = tabulation committee (judge columns + 20/20
+            // weighting, for auditing). Announce = host/emcee (rank + name
+            // + total only, nothing to decode on air). Print follows
+            // whichever is active.
+            <div className="inline-flex rounded-md border p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setMode("detailed")}
+                className={
+                  "px-2.5 py-1 rounded-sm font-medium transition-colors " +
+                  (mode === "detailed"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                Detailed
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("announce")}
+                className={
+                  "px-2.5 py-1 rounded-sm font-medium transition-colors " +
+                  (mode === "announce"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                Announce
+              </button>
+            </div>
+          )}
+          <Button onClick={handlePrint} variant="outline" size="sm">
+            <Printer className="size-4" /> Print
+          </Button>
+        </div>
       </div>
 
-      {/* Tabs instead of a dropdown — with only 5 views, a row of buttons
+      {/* Tabs instead of a dropdown — with only 6 views, a row of buttons
           is faster to scan and switch between than opening a select each
           time, and shows all the options at once instead of hiding them
           behind a closed trigger. */}
@@ -102,11 +144,14 @@ export default function ResultsCombined() {
         <CardContent className="pt-6">
           <p className="text-xs text-muted-foreground mb-3">
             {activeView.description}
+            {modeApplies && mode === "announce"
+              ? " — Announce view: placements only, for the host."
+              : ""}
           </p>
           {view === "combined" ? (
-            <CombinedResultsTable />
+            <CombinedResultsTable mode={mode} />
           ) : view === "preliminary" ? (
-            <PreliminaryResultsTable />
+            <PreliminaryResultsTable mode={mode} />
           ) : view === "top5" ? (
             <Top5ResultsTable />
           ) : view === "miss-baguio" ? (
@@ -119,7 +164,7 @@ export default function ResultsCombined() {
         </CardContent>
       </Card>
 
-      <style>{`@media print { body * { visibility: hidden; } .printable, .printable * { visibility: visible; } .printable { position: absolute; left: 0; top: 0; width: 100%; } table { border: 1px solid #000; border-collapse: collapse; } th, td { border: 1px solid #000 !important; color: #000 !important; } }`}</style>
+      <style>{`@media print { body * { visibility: hidden; } .printable, .printable * { visibility: visible; } .printable { position: absolute; left: 0; top: 0; width: 100%; } table { border: 1px solid #000; border-collapse: collapse; } th, td { border: 1px solid #000 !important; color: #000 !important; } thead { display: table-header-group; } .printable section { break-inside: avoid; } .printable section + section { margin-top: 1.5rem; } }`}</style>
     </div>
   );
 }

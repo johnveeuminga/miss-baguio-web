@@ -88,6 +88,11 @@ export type ScoringControlDto = {
   activeCategoryName?: string | null;
   isScoringOpen: boolean;
   isRealtimeDisplayEnabled: boolean;
+  // Whether Top 7 final ranking is open for judges — set by
+  // POST /api/admin/finalize-top7, cleared by POST /api/admin/reopen-scoring.
+  // Backend added this to ScoringControlDto in the top7-open-live-broadcast
+  // change; mirror it here so consumers don't have to cast.
+  isTop7Open?: boolean;
   updatedByUserId?: number | null;
   updatedByUserName?: string | null;
   updatedAt: string;

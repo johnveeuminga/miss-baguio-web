@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { get } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
-import type { CandidateCombinedResultDto } from "./types";
+import type { CandidateCombinedResultDto, ResultsMode } from "./types";
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
 
-export default function CombinedResultsTable() {
+export default function CombinedResultsTable({
+  mode = "detailed",
+}: {
+  mode?: ResultsMode;
+}) {
   const token = useAuthStore((s) => s.token);
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<CandidateCombinedResultDto[]>([]);
@@ -43,6 +47,83 @@ export default function CombinedResultsTable() {
   const sorted = [...results].sort(
     (a, b) => (a.candidateId ?? 0) - (b.candidateId ?? 0)
   );
+
+  // Announce view — a placement sheet for the host: final rank, candidate
+  // number, name, barangay, combined total. No judge columns, no per-
+  // category weighting. Candidates without a rank fall to the bottom.
+  if (mode === "announce") {
+    const ranked = [...results].sort((a, b) => {
+      const ra = a.finalRank ?? Number.POSITIVE_INFINITY;
+      const rb = b.finalRank ?? Number.POSITIVE_INFINITY;
+      if (ra !== rb) return ra - rb;
+      return (a.candidateId ?? 0) - (b.candidateId ?? 0);
+    });
+    const anyPartial = results.some((r) => {
+      const md = (r.morningCategories ?? []).every((c) => c.averageScore != null);
+      const cd = (r.coronationCategories ?? []).every(
+        (c) => c.averageScore != null
+      );
+      return !md || !cd;
+    });
+    return (
+      <div className="printable">
+        <h3 className="mb-2 text-base font-semibold">Overall Standings</h3>
+        {anyPartial && (
+          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            Partial — not every category is fully scored yet. Not final.
+          </p>
+        )}
+        <div className="overflow-auto">
+          <table
+            className="min-w-full border-collapse table-auto text-base"
+            style={{ borderColor: "#000" }}
+          >
+            <thead>
+              <tr>
+                <th className="border px-3 py-2 text-left">Place</th>
+                <th className="border px-3 py-2 text-left">#</th>
+                <th className="border px-3 py-2 text-left">Candidate</th>
+                <th className="border px-3 py-2 text-left">Barangay</th>
+                <th className="border px-3 py-2 text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r) => {
+                const total =
+                  r.combinedTotal ??
+                  (r.morningWeightedTotal != null &&
+                  r.coronationWeightedTotal != null
+                    ? r.morningWeightedTotal + r.coronationWeightedTotal
+                    : null);
+                return (
+                  <tr
+                    key={r.candidateId}
+                    className={cn(
+                      r.finalRank != null && r.finalRank <= 7 ? "font-bold" : ""
+                    )}
+                  >
+                    <td className="border px-3 py-2">
+                      {r.finalRank ?? "—"}
+                      {r.finalRank != null && r.finalRank <= 7 ? " ★" : ""}
+                    </td>
+                    <td className="border px-3 py-2">{r.candidateId}</td>
+                    <td className="border px-3 py-2">{r.candidateName}</td>
+                    <td className="border px-3 py-2">{r.barangay ?? "—"}</td>
+                    <td className="border px-3 py-2 text-right">
+                      {total != null ? total.toFixed(2) : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          ★ = Top 7. Total is all four categories combined.
+        </p>
+      </div>
+    );
+  }
 
   // The judge columns for a coronation category — real names + ids, taken
   // from whichever candidate row has the most entries (the backend returns
