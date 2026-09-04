@@ -50,12 +50,28 @@ export default function CombinedResultsTable({
 
   // Announce view — a placement sheet for the host: final rank, candidate
   // number, name, barangay, combined total. No judge columns, no per-
-  // category weighting. Candidates without a rank fall to the bottom.
+  // category weighting.
   if (mode === "announce") {
+    // The backend ranks EVERY candidate by combined total even when nothing
+    // is scored (all totals 0 -> ranks 1..N in candidate order). Showing
+    // that as "1st, 2nd, 3rd…" with stars reads like a real standing when
+    // it's just row order. So only treat a candidate as placed once she has
+    // an actual non-zero total; everyone else shows "—" and no star, and
+    // sinks to the bottom.
+    const totalFor = (r: CandidateCombinedResultDto): number | null =>
+      r.combinedTotal ??
+      (r.morningWeightedTotal != null && r.coronationWeightedTotal != null
+        ? r.morningWeightedTotal + r.coronationWeightedTotal
+        : null);
+    const isPlaced = (r: CandidateCombinedResultDto): boolean => {
+      const t = totalFor(r);
+      return r.finalRank != null && t != null && t > 0;
+    };
     const ranked = [...results].sort((a, b) => {
-      const ra = a.finalRank ?? Number.POSITIVE_INFINITY;
-      const rb = b.finalRank ?? Number.POSITIVE_INFINITY;
-      if (ra !== rb) return ra - rb;
+      const pa = isPlaced(a);
+      const pb = isPlaced(b);
+      if (pa !== pb) return pa ? -1 : 1;
+      if (pa && pb) return (a.finalRank ?? 0) - (b.finalRank ?? 0);
       return (a.candidateId ?? 0) - (b.candidateId ?? 0);
     });
     const anyPartial = results.some((r) => {
@@ -65,14 +81,20 @@ export default function CombinedResultsTable({
       );
       return !md || !cd;
     });
+    const anyPlaced = results.some(isPlaced);
     return (
       <div className="printable">
         <h3 className="mb-2 text-base font-semibold">Overall Standings</h3>
-        {anyPartial && (
+        {!anyPlaced ? (
+          <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+            No scores yet — nobody is placed. This sheet fills in as judges
+            score.
+          </p>
+        ) : anyPartial ? (
           <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
             Partial — not every category is fully scored yet. Not final.
           </p>
-        )}
+        ) : null}
         <div className="overflow-auto">
           <table
             className="min-w-full border-collapse table-auto text-base"
@@ -89,28 +111,28 @@ export default function CombinedResultsTable({
             </thead>
             <tbody>
               {ranked.map((r) => {
-                const total =
-                  r.combinedTotal ??
-                  (r.morningWeightedTotal != null &&
-                  r.coronationWeightedTotal != null
-                    ? r.morningWeightedTotal + r.coronationWeightedTotal
-                    : null);
+                const total = totalFor(r);
+                const placed = isPlaced(r);
                 return (
                   <tr
                     key={r.candidateId}
                     className={cn(
-                      r.finalRank != null && r.finalRank <= 7 ? "font-bold" : ""
+                      placed && r.finalRank != null && r.finalRank <= 7
+                        ? "font-bold"
+                        : ""
                     )}
                   >
                     <td className="border px-3 py-2">
-                      {r.finalRank ?? "—"}
-                      {r.finalRank != null && r.finalRank <= 7 ? " ★" : ""}
+                      {placed ? r.finalRank : "—"}
+                      {placed && r.finalRank != null && r.finalRank <= 7
+                        ? " ★"
+                        : ""}
                     </td>
                     <td className="border px-3 py-2">{r.candidateId}</td>
                     <td className="border px-3 py-2">{r.candidateName}</td>
                     <td className="border px-3 py-2">{r.barangay ?? "—"}</td>
                     <td className="border px-3 py-2 text-right">
-                      {total != null ? total.toFixed(2) : "—"}
+                      {total != null && total > 0 ? total.toFixed(2) : "—"}
                     </td>
                   </tr>
                 );
