@@ -456,7 +456,10 @@ export default function RoundScoring() {
                       <CandidatePhoto photoUrl={candidate.photoUrl} name={candidate.candidateName} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold truncate">{candidate.candidateName}</div>
+                      <div className="text-sm font-semibold truncate">
+                        <span className="text-muted-foreground font-normal">#{candidate.candidateNo}</span>{" "}
+                        {candidate.candidateName}
+                      </div>
                       {candidate.barangay && (
                         <div className="text-[11px] text-muted-foreground truncate">
                           {candidate.barangay}
@@ -517,7 +520,10 @@ export default function RoundScoring() {
                               <CandidatePhoto photoUrl={featured.photoUrl} name={featured.candidateName} />
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-lg truncate">{featured.candidateName}</div>
+                              <div className="font-bold text-lg truncate">
+                                <span className="text-muted-foreground font-normal">#{featured.candidateNo}</span>{" "}
+                                {featured.candidateName}
+                              </div>
                               {featured.barangay && (
                                 <div className="text-sm text-muted-foreground truncate">
                                   {featured.barangay}

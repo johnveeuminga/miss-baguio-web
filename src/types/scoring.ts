@@ -63,6 +63,11 @@ export type MyCandidateCategoryScoreDto = {
 
 export type MyRoundCandidateScoresDto = {
   candidateId: number;
+  // Not a stored value — 1-based position in candidate-Id order, matching
+  // the same convention every results screen already uses. Added so
+  // judges see "#7" the way every other screen numbers the same
+  // candidates, instead of scoring by name alone.
+  candidateNo: number;
   candidateName: string;
   barangay?: string | null;
   photoUrl?: string | null;
