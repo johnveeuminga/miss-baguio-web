@@ -168,8 +168,6 @@ export default function CombinedResultsTable({
 
   const eveningJudges = judgesForCategory("Evening Wear");
   const swimsuitJudges = judgesForCategory("Swimwear");
-  const maxEvening = eveningJudges.length;
-  const maxSwimsuit = swimsuitJudges.length;
 
   // A candidate missing an average in ANY of the 4 categories means her
   // combined total/rank on this screen reflects only part of the 100% —
@@ -188,8 +186,39 @@ export default function CombinedResultsTable({
     return !morningDone || !coronationDone;
   });
 
+  // One scoresheet per coronation category (Evening Wear, then Swimwear),
+  // stacked — same pattern as PreliminaryResultsTable, so a 9-judge panel
+  // reads at the same font size as the Q&A/Creative Costume sheets instead
+  // of forcing all ~24 columns onto one wide page. A single wide table only
+  // fits a full panel by shrinking to ~7px, which is too small to read at
+  // the table; stacking keeps each sheet to Name + Jn + Avg + W (~13 cols)
+  // at a normal print size, same as Preliminaries.
+  const categorySheets: {
+    key: string;
+    label: string;
+    judges: { judgeId: number; judgeName: string }[];
+    getCategory: (
+      r: CandidateCombinedResultDto
+    ) => { averageScore: number | null; weightedContribution: number | null; judgeScores?: { judgeId: number; score: number | null }[] } | undefined;
+  }[] = [
+    {
+      key: "evening-wear",
+      label: "Evening Wear",
+      judges: eveningJudges,
+      getCategory: (r) =>
+        r.coronationCategories?.find((c) => c.categoryName === "Evening Wear"),
+    },
+    {
+      key: "swimwear",
+      label: "Swimwear",
+      judges: swimsuitJudges,
+      getCategory: (r) =>
+        r.coronationCategories?.find((c) => c.categoryName === "Swimwear"),
+    },
+  ];
+
   return (
-    <div className="overflow-auto printable" data-print-mode="detailed">
+    <div className="printable space-y-8" data-print-mode="detailed">
       {isPartial && (
         <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
           <AlertTriangle className="size-4 shrink-0 mt-0.5" />
@@ -202,169 +231,150 @@ export default function CombinedResultsTable({
           </span>
         </div>
       )}
-      <table
-        className="min-w-full border-collapse table-auto"
-        style={{ borderColor: "#000" }}
-      >
-        <thead>
-          <tr>
-            <th className="border px-2 py-1 text-left" colSpan={2}>
-              Candidate
-            </th>
-            {maxEvening > 0 && (
-              <th
-                className="border px-2 py-1 text-left"
-                colSpan={maxEvening + 2}
-              >
-                Evening Wear
-              </th>
-            )}
-            {maxSwimsuit > 0 && (
-              <th
-                className="border px-2 py-1 text-left"
-                colSpan={maxSwimsuit + 2}
-              >
-                Swimwear
-              </th>
-            )}
-            {/* rowSpan spans both header rows so these three labels appear
-                once, not stacked on top of a second, identically-named row
-                below (was "Morning Total" over "Morning", "Rank" over
-                "Rank", etc.) */}
-            <th className="border px-2 py-1 text-left" rowSpan={2}>
-              Morning Total (Q&amp;A + Creative Costume)
-            </th>
-            <th className="border px-2 py-1 text-left" rowSpan={2}>
-              Coronation Total (Swimwear + Evening Wear)
-            </th>
-            <th className="border px-2 py-1 text-left" rowSpan={2}>
-              Rank
-            </th>
-          </tr>
-          <tr>
-            <th className="border px-2 py-1 text-left">No</th>
-            <th className="border px-2 py-1 text-left">Name</th>
-            {eveningJudges.map((j, i) => (
-              <th
-                key={`eg-j${j.judgeId}-${i}`}
-                className="border px-2 py-1 text-left whitespace-nowrap"
-              >
-                {j.judgeName || `J${i + 1}`}
-              </th>
-            ))}
-            {maxEvening > 0 && (
-              <>
-                <th className="border px-2 py-1 text-left">Avg</th>
-                <th className="border px-2 py-1 text-left">W</th>
-              </>
-            )}
-            {swimsuitJudges.map((j, i) => (
-              <th
-                key={`sw-j${j.judgeId}-${i}`}
-                className="border px-2 py-1 text-left whitespace-nowrap"
-              >
-                {j.judgeName || `J${i + 1}`}
-              </th>
-            ))}
-            {maxSwimsuit > 0 && (
-              <>
-                <th className="border px-2 py-1 text-left">Avg</th>
-                <th className="border px-2 py-1 text-left">W</th>
-              </>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => {
-            const eg = r.coronationCategories?.find(
-              (c) => c.categoryName === "Evening Wear"
-            );
-            const sw = r.coronationCategories?.find(
-              (c) => c.categoryName === "Swimwear"
-            );
-            return (
-              <tr key={r.candidateId}>
-                <td className="border px-2 py-1">{r.candidateId}</td>
-                <td className="border px-2 py-1">{r.candidateName}</td>
-                {eveningJudges.map((j, idx) => {
-                  const cell =
-                    eg?.judgeScores?.find((js) => js.judgeId === j.judgeId) ??
-                    eg?.judgeScores?.[idx];
-                  return (
-                    <td
-                      key={`eg-${r.candidateId}-${j.judgeId}-${idx}`}
-                      className="border px-2 py-1 text-right"
+
+      {categorySheets.map((sheet) => (
+        <section key={sheet.key} className="break-inside-avoid">
+          <h3 className="mb-2 text-sm font-semibold">{sheet.label}</h3>
+          <div className="overflow-auto">
+            <table
+              className="min-w-full border-collapse table-auto"
+              style={{ borderColor: "#000" }}
+            >
+              <thead>
+                <tr>
+                  <th className="border px-2 py-1 text-left">No</th>
+                  <th className="border px-2 py-1 text-left">Name</th>
+                  {/* Screen shows the judge's real name; print always
+                      collapses to J1..Jn to keep the sheet tight. */}
+                  {sheet.judges.map((j, i) => (
+                    <th
+                      key={`${sheet.key}-j${j.judgeId}-${i}`}
+                      className="border px-2 py-1 text-right whitespace-nowrap"
                     >
-                      {cell && cell.score != null ? cell.score.toFixed(2) : "—"}
-                    </td>
+                      <span className="screen-only">
+                        {j.judgeName || `J${i + 1}`}
+                      </span>
+                      <span className="print-only">{`J${i + 1}`}</span>
+                    </th>
+                  ))}
+                  <th className="border px-2 py-1 text-right">Avg</th>
+                  <th className="border px-2 py-1 text-right">W</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((r) => {
+                  const cat = sheet.getCategory(r);
+                  return (
+                    <tr key={`${sheet.key}-${r.candidateId}`}>
+                      <td className="border px-2 py-1">{r.candidateId}</td>
+                      <td className="border px-2 py-1">{r.candidateName}</td>
+                      {sheet.judges.map((j, idx) => {
+                        const cell =
+                          cat?.judgeScores?.find(
+                            (js) => js.judgeId === j.judgeId
+                          ) ?? cat?.judgeScores?.[idx];
+                        return (
+                          <td
+                            key={`${sheet.key}-c-${r.candidateId}-${j.judgeId}-${idx}`}
+                            className="border px-2 py-1 text-right"
+                          >
+                            {cell && cell.score != null
+                              ? cell.score.toFixed(2)
+                              : "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="border px-2 py-1 text-right font-semibold">
+                        {cat?.averageScore != null
+                          ? cat.averageScore.toFixed(2)
+                          : "—"}
+                      </td>
+                      <td className="border px-2 py-1 text-right">
+                        {cat?.weightedContribution != null
+                          ? cat.weightedContribution.toFixed(2)
+                          : "—"}
+                      </td>
+                    </tr>
                   );
                 })}
-                {maxEvening > 0 && (
-                  <>
-                    <td className="border px-2 py-1 text-right">
-                      {eg?.averageScore != null
-                        ? eg.averageScore.toFixed(2)
-                        : "—"}
-                    </td>
-                    <td className="border px-2 py-1 text-right">
-                      {eg?.weightedContribution != null
-                        ? eg.weightedContribution.toFixed(2)
-                        : "—"}
-                    </td>
-                  </>
-                )}
-                {swimsuitJudges.map((j, idx) => {
-                  const cell =
-                    sw?.judgeScores?.find((js) => js.judgeId === j.judgeId) ??
-                    sw?.judgeScores?.[idx];
-                  return (
-                    <td
-                      key={`sw-${r.candidateId}-${j.judgeId}-${idx}`}
-                      className="border px-2 py-1 text-right"
-                    >
-                      {cell && cell.score != null ? cell.score.toFixed(2) : "—"}
-                    </td>
-                  );
-                })}
-                {maxSwimsuit > 0 && (
-                  <>
-                    <td className="border px-2 py-1 text-right">
-                      {sw?.averageScore != null
-                        ? sw.averageScore.toFixed(2)
-                        : "—"}
-                    </td>
-                    <td className="border px-2 py-1 text-right">
-                      {sw?.weightedContribution != null
-                        ? sw.weightedContribution.toFixed(2)
-                        : "—"}
-                    </td>
-                  </>
-                )}
-                <td className="border px-2 py-1 text-right">
-                  {r.morningWeightedTotal != null
-                    ? r.morningWeightedTotal.toFixed(2)
-                    : "—"}
-                </td>
-                <td className="border px-2 py-1 text-right">
-                  {r.coronationWeightedTotal != null
-                    ? r.coronationWeightedTotal.toFixed(2)
-                    : "—"}
-                </td>
-                <td
-                  className={cn(
-                    r.finalRank != null && r.finalRank <= 7
-                      ? "font-bold text-primary"
-                      : "",
-                    "border px-2 py-1"
-                  )}
-                >
-                  {r.finalRank ?? "—"}
-                </td>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
+
+      {/* Combined tally — Morning + Coronation weighted totals -> final
+          rank. No judge columns here, so it stays compact regardless of
+          panel size. */}
+      <section className="break-inside-avoid">
+        <h3 className="mb-2 text-sm font-semibold">Overall Tally</h3>
+        <div className="overflow-auto">
+          <table
+            className="min-w-full border-collapse table-auto"
+            style={{ borderColor: "#000" }}
+          >
+            <thead>
+              <tr>
+                <th className="border px-2 py-1 text-left">No</th>
+                <th className="border px-2 py-1 text-left">Name</th>
+                <th className="border px-2 py-1 text-right whitespace-nowrap">
+                  <span className="screen-only">
+                    Morning Total (Q&amp;A + Creative Costume)
+                  </span>
+                  <span className="print-only">Morning</span>
+                </th>
+                <th className="border px-2 py-1 text-right whitespace-nowrap">
+                  <span className="screen-only">
+                    Coronation Total (Swimwear + Evening Wear)
+                  </span>
+                  <span className="print-only">Coronation</span>
+                </th>
+                <th className="border px-2 py-1 text-right">Combined</th>
+                <th className="border px-2 py-1 text-left">Rank</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {sorted.map((r) => {
+                const combined =
+                  r.combinedTotal ??
+                  (r.morningWeightedTotal != null &&
+                  r.coronationWeightedTotal != null
+                    ? r.morningWeightedTotal + r.coronationWeightedTotal
+                    : null);
+                return (
+                  <tr key={`tally-${r.candidateId}`}>
+                    <td className="border px-2 py-1">{r.candidateId}</td>
+                    <td className="border px-2 py-1">{r.candidateName}</td>
+                    <td className="border px-2 py-1 text-right">
+                      {r.morningWeightedTotal != null
+                        ? r.morningWeightedTotal.toFixed(2)
+                        : "—"}
+                    </td>
+                    <td className="border px-2 py-1 text-right">
+                      {r.coronationWeightedTotal != null
+                        ? r.coronationWeightedTotal.toFixed(2)
+                        : "—"}
+                    </td>
+                    <td className="border px-2 py-1 text-right font-semibold">
+                      {combined != null ? combined.toFixed(2) : "—"}
+                    </td>
+                    <td
+                      className={cn(
+                        r.finalRank != null && r.finalRank <= 7
+                          ? "font-bold text-primary"
+                          : "",
+                        "border px-2 py-1"
+                      )}
+                    >
+                      {r.finalRank ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
