@@ -183,11 +183,10 @@ export default function RoundScoring() {
     error,
     reload,
     saveScore,
-    submitRound,
-    requestCorrection,
-    totalFilled,
-    totalExpected,
-    isComplete,
+    submitCategory,
+    requestCategoryCorrection,
+    categoryProgress,
+    categorySubmission,
   } = useRoundScoring(roundInvalid ? -1 : roundId);
   const { control: scoringControl, loading: scoringControlLoading } = useScoringControl();
   const token = useAuthStore((s) => s.token);
@@ -271,9 +270,17 @@ export default function RoundScoring() {
     ROUNDS.find((r) => r.id === roundId)?.description ?? data?.roundName ?? "Round";
   const selectedCategory = data?.categories.find((c) => c.id === categoryId) ?? null;
 
-  const locked = data?.isSubmitted ?? false;
-  // Scoring is possible only while the round isn't submitted AND admin has
-  // this exact category open — matches the server-side gate in
+  // Submission is now per-category (a judge can submit Q&A without Costume
+  // Wear needing to be scoreable/complete too) — every one of these is
+  // scoped to whichever category tab is currently selected, not the round
+  // as a whole.
+  const selectedCategorySubmission = categoryId != null ? categorySubmission(categoryId) : null;
+  const locked = selectedCategorySubmission?.isSubmitted ?? false;
+  const selectedCategoryProgress = categoryId != null
+    ? categoryProgress(categoryId)
+    : { filled: 0, expected: 0, isComplete: false };
+  // Scoring is possible only while THIS category isn't submitted AND admin
+  // has this exact category open — matches the server-side gate in
   // ScoringController.SubmitScore, so a disabled control here means the
   // API would reject it too, not just a client-side nicety.
   const scoringBlocked = activeCategoryId == null || categoryId !== activeCategoryId;
@@ -293,26 +300,28 @@ export default function RoundScoring() {
   }
 
   async function handleSubmit() {
+    if (!categoryId) return;
     setSubmitting(true);
     try {
-      await submitRound();
-      toast.success("Round submitted. Scores are now locked.");
+      await submitCategory(categoryId);
+      toast.success(`${selectedCategory?.description ?? "Category"} submitted. Scores are now locked.`);
       setConfirmSubmitOpen(false);
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Failed to submit round"));
+      toast.error(extractErrorMessage(err, "Failed to submit category"));
     } finally {
       setSubmitting(false);
     }
   }
 
   async function handleRequestCorrection() {
+    if (!categoryId) return;
     setSubmitting(true);
     try {
-      await requestCorrection();
-      toast.success("Round reopened. Make your fix, then submit again.");
+      await requestCategoryCorrection(categoryId);
+      toast.success(`${selectedCategory?.description ?? "Category"} reopened. Make your fix, then submit again.`);
       setConfirmCorrectionOpen(false);
     } catch (err) {
-      toast.error(extractErrorMessage(err, "Failed to reopen round"));
+      toast.error(extractErrorMessage(err, "Failed to reopen category"));
     } finally {
       setSubmitting(false);
     }
@@ -325,9 +334,10 @@ export default function RoundScoring() {
           <ChevronLeft className="size-4" />
           Back to Home
         </Button>
-        {data && (
+        {data && categoryId != null && (
           <span className="text-xs text-muted-foreground shrink-0">
-            {totalFilled}/{totalExpected} scored
+            {selectedCategoryProgress.filled}/{selectedCategoryProgress.expected} scored
+            {selectedCategory ? ` — ${selectedCategory.description}` : ""}
           </span>
         )}
       </div>
@@ -551,22 +561,22 @@ export default function RoundScoring() {
           <div className="text-sm text-muted-foreground">
             {locked ? (
               <span className="flex items-center gap-1.5">
-                <Lock className="size-4" /> Submitted
+                <Lock className="size-4" /> {selectedCategory?.description ?? "Category"} submitted
               </span>
-            ) : isComplete ? (
+            ) : selectedCategoryProgress.isComplete ? (
               <span className="flex items-center gap-1.5 text-emerald-600">
-                <CheckCircle2 className="size-4" /> All scores entered
+                <CheckCircle2 className="size-4" /> All scores entered for {selectedCategory?.description ?? "this category"}
               </span>
             ) : (
               <span className="flex items-center gap-1.5 text-amber-600">
                 <AlertTriangle className="size-4" />
-                {totalExpected - totalFilled} score(s) remaining
+                {selectedCategoryProgress.expected - selectedCategoryProgress.filled} score(s) remaining in {selectedCategory?.description ?? "this category"}
               </span>
             )}
           </div>
           {locked ? (
-            data.canRequestCorrection &&
-            !data.hasUsedCorrection && (
+            selectedCategorySubmission?.canRequestCorrection &&
+            !selectedCategorySubmission?.hasUsedCorrection && (
               <Button
                 variant="outline"
                 onClick={() => setConfirmCorrectionOpen(true)}
@@ -575,8 +585,11 @@ export default function RoundScoring() {
               </Button>
             )
           ) : (
-            <Button onClick={() => setConfirmSubmitOpen(true)} disabled={!isComplete}>
-              Submit Round
+            <Button
+              onClick={() => setConfirmSubmitOpen(true)}
+              disabled={!selectedCategoryProgress.isComplete}
+            >
+              Submit {selectedCategory?.description ?? "Category"}
             </Button>
           )}
         </div>
@@ -587,11 +600,16 @@ export default function RoundScoring() {
           <Card className="max-w-sm w-full">
             <CardContent className="pt-6 space-y-4">
               <div>
-                <h2 className="font-semibold text-lg">Submit this round?</h2>
+                <h2 className="font-semibold text-lg">
+                  Submit {selectedCategory?.description ?? "this category"}?
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  All {totalExpected} scores will be locked. You'll have one
-                  correction available afterward if you need to fix a
-                  mistake.
+                  All {selectedCategoryProgress.expected} scores for{" "}
+                  {selectedCategory?.description ?? "this category"} will be
+                  locked. You'll have one correction available for it
+                  afterward if you need to fix a mistake — other categories
+                  in this round are unaffected and can still be scored
+                  separately.
                 </p>
               </div>
               <div className="flex gap-2 justify-end">
@@ -618,9 +636,9 @@ export default function RoundScoring() {
               <div>
                 <h2 className="font-semibold text-lg">Reopen for correction?</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  This is your <strong>one</strong> allowed correction for
-                  this round. Once you submit again, it can't be reopened a
-                  second time.
+                  This is your <strong>one</strong> allowed correction for{" "}
+                  {selectedCategory?.description ?? "this category"}. Once
+                  you submit it again, it can't be reopened a second time.
                 </p>
               </div>
               <div className="flex gap-2 justify-end">
