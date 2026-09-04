@@ -112,6 +112,17 @@ export default function AdminActiveControl() {
   const selectedCategory =
     selectedRound?.categories.find((c) => c.id === categoryId) ?? null;
 
+  // The Top 7 ranking round has no categories — judges rank all 7 finalists
+  // on their own devices (see Top7Ranking.tsx), there's no "on stage"
+  // session, no category to open, nothing for the admin to run here. It's
+  // gated purely by scoringControl.isTop7Open (POST /api/admin/finalize-top7
+  // via the Top 7 Readiness card above). Without this guard the whole
+  // session/category/scoring-toggle block still renders for it — an empty
+  // Category picker, a "Scoring Closed" switch that does nothing, a
+  // permanently-disabled Go Live — which just looks broken.
+  const isRankingRound =
+    selectedRound != null && selectedRound.categories.length === 0;
+
   // The judge count that actually applies to the selected category — its
   // own cap when the admin has set one (e.g. Q&A capped at 5), otherwise
   // the global active-judge count. Every "N/X judges" display in this card
@@ -659,6 +670,50 @@ export default function AdminActiveControl() {
       <div className="space-y-4">
         <Card>
           <CardContent className="pt-5 pb-5 space-y-4">
+            {/* Round picker — always visible so the admin can move between
+                Preliminaries / Coronation / Top 7 in every mode. */}
+            <Select
+              value={roundId != null ? String(roundId) : undefined}
+              onValueChange={(v) => setRoundId(Number(v))}
+              disabled={busy}
+            >
+              <SelectTrigger className="h-11 bg-muted border-border w-[12rem]">
+                <SelectValue placeholder="Round" />
+              </SelectTrigger>
+              <SelectContent>
+                {rounds.map((r) => (
+                  <SelectItem key={r.id} value={String(r.id)}>
+                    {r.description}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Top 7 ranking round has no categories — judges rank the
+                finalists on their own devices, gated by isTop7Open (set
+                from the Top 7 Readiness card above). Nothing to run here,
+                so show a plain status line instead of the empty
+                session/category/scoring-toggle machinery. */}
+            {isRankingRound && (
+              <div className="rounded-md border border-border bg-muted/40 px-3 py-3 text-sm">
+                {scoringControl?.isTop7Open ? (
+                  <span className="flex items-center gap-2 font-medium text-emerald-600">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Top 7 ranking is open — judges rank the finalists on
+                    their own devices. Nothing to run from here.
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    Top 7 ranking isn&apos;t open yet. Use{" "}
+                    <strong>Finalize Top 7</strong> above once every
+                    candidate is fully scored.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {!isRankingRound && (
+            <>
             {/* Scoring gate — topmost since it's the single most important
                 thing admin needs to see/control: can judges submit right
                 now, or not. A compact switch + status text instead of the
@@ -710,29 +765,11 @@ export default function AdminActiveControl() {
               </button>
             </div>
 
-            {/* Round, Category, Candidate, Go Live — all four together in
-                one row on tablet-width screens and wider (a real iPad in
-                landscape has plenty of room for this); wraps to two rows
-                on anything narrower rather than clipping. Round/Category
-                still real dropdowns, just given less relative width since
-                they change far less often than the candidate picker. */}
+            {/* Category, Candidate, Go Live — one row on tablet-width and
+                wider; wraps rather than clipping on anything narrower. The
+                Round picker is above the scoring gate so it stays visible
+                in the Top 7 ranking mode too. */}
             <div className="flex flex-wrap gap-2.5">
-              <Select
-                value={roundId != null ? String(roundId) : undefined}
-                onValueChange={(v) => setRoundId(Number(v))}
-                disabled={busy}
-              >
-                <SelectTrigger className="h-11 bg-muted border-border w-[9.5rem] shrink-0">
-                  <SelectValue placeholder="Round" />
-                </SelectTrigger>
-                <SelectContent>
-                  {rounds.map((r) => (
-                    <SelectItem key={r.id} value={String(r.id)}>
-                      {r.description}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Select
                 value={categoryId != null ? String(categoryId) : undefined}
                 onValueChange={(v) => setCategoryId(Number(v))}
@@ -963,6 +1000,8 @@ export default function AdminActiveControl() {
                   </Button>
                 </div>
               </div>
+            )}
+            </>
             )}
           </CardContent>
         </Card>
