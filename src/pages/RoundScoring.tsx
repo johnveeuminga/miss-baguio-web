@@ -7,7 +7,7 @@ import { LoadingView, ErrorView } from "@/components/ui/status-view";
 import { ROUNDS } from "@/lib/rounds";
 import { useRoundScoring, extractErrorMessage } from "@/hooks/useRoundScoring";
 import { useScoringControl } from "@/hooks/useScoringControl";
-import { ChevronLeft, CheckCircle2, Lock, AlertTriangle, Minus, Plus } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Lock, AlertTriangle, Minus, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import type { RoundCategoryDto, MyRoundCandidateScoresDto } from "@/types/scoring";
 
@@ -530,13 +530,18 @@ export default function RoundScoring() {
                       const key = `${selected.candidateId}-${categoryId}`;
                       const isSaving = savingKeys.has(key);
                       return (
-                        <Card className="border-primary ring-1 ring-primary/40">
-                          <CardContent className="pt-4">
-                            <div className="flex items-center gap-3 mb-4">
+                        // min-h keeps the scoring column tall enough that
+                        // the readout and slider sit in the middle of the
+                        // screen rather than bunched at the top — the
+                        // roster beside it runs to 16 rows, so a short card
+                        // here left most of the column empty.
+                        <Card className="border-primary ring-1 ring-primary/40 min-h-[32rem] flex flex-col">
+                          <CardContent className="pt-4 flex-1 flex flex-col">
+                            <div className="flex items-start gap-3 mb-4">
                               <div className="size-20 rounded-md overflow-hidden shrink-0 bg-muted">
                                 <CandidatePhoto photoUrl={selected.photoUrl} name={selected.candidateName} />
                               </div>
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <div className="font-bold text-lg truncate">
                                   <span className="text-muted-foreground font-normal">#{selected.candidateNo}</span>{" "}
                                   {selected.candidateName}
@@ -547,31 +552,40 @@ export default function RoundScoring() {
                                   </div>
                                 )}
                               </div>
+                              {/* Clears the selection, returning this
+                                  column to its "tap a candidate" state. */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedCandidateId(null)}
+                                aria-label="Clear selected candidate"
+                                className="shrink-0 -mt-1 -mr-1 p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                              >
+                                <X className="size-5" />
+                              </button>
                             </div>
-                            <ScoreEntry
-                              key={key}
-                              value={value}
-                              category={selectedCategory}
-                              isSaving={isSaving}
-                              disabled={locked || scoringBlocked}
-                              onChange={(v) => void handleScoreChange(selected.candidateId, v)}
-                            />
-                            {/* No Save button — every change autosaves on
-                                the existing ~300ms debounce. */}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedCandidateId(null)}
-                              className="w-full mt-4 py-2 text-xs text-muted-foreground hover:text-foreground"
-                            >
-                              Back to candidate list
-                            </button>
+                            {/* Centred in the leftover height; every change
+                                autosaves on the existing ~300ms debounce,
+                                so there's no Save button. */}
+                            <div className="flex-1 flex flex-col justify-center">
+                              <ScoreEntry
+                                key={key}
+                                value={value}
+                                category={selectedCategory}
+                                isSaving={isSaving}
+                                disabled={locked || scoringBlocked}
+                                onChange={(v) => void handleScoreChange(selected.candidateId, v)}
+                              />
+                            </div>
                           </CardContent>
                         </Card>
                       );
                     })()
                   ) : (
-                    <Card className="border-dashed">
-                      <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                    // Same min-h as the scoring card above, so the column
+                    // doesn't jump height when a candidate is selected or
+                    // cleared.
+                    <Card className="border-dashed min-h-[32rem] flex flex-col">
+                      <CardContent className="flex-1 flex items-center justify-center text-center text-sm text-muted-foreground">
                         Tap a candidate to score her.
                       </CardContent>
                     </Card>
