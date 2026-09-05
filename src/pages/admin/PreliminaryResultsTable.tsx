@@ -144,24 +144,35 @@ export default function PreliminaryResultsTable({
   // returns judgeScores in a consistent order for every candidate row of a
   // given category (claim order for capped categories, judge-id order
   // otherwise — see ResultsController.GetFullPreliminaryTable), so column
-  // index N is the same judge in every row. Take the judge list (real
-  // names + ids, not just a count) from whichever row has the most entries
-  // for that category, so a candidate nobody scored yet doesn't shrink the
-  // header.
+  // index N is the same judge in every row.
+  //
+  // Only judges who ACTUALLY SCORED that category get a column. The payload
+  // includes an entry for every seated judge, scoring or not, with
+  // score: null for the ones who didn't — so keying columns off "appears in
+  // the payload" printed a full-width sheet of empty "—" columns for judges
+  // who never scored (or were never seated at all). The panel size isn't
+  // known ahead of time and differs per category — a judge can sit out Q&A
+  // and score Creative Costume — so this is computed per category, by
+  // unioning across every candidate row rather than trusting any single row.
   const categoryDefs = (sorted[0]?.categoryScores ?? []).map((c) => {
-    const judges =
-      sorted
-        .map(
-          (r) =>
-            r.categoryScores.find((rc) => rc.categoryId === c.categoryId)
-              ?.judgeScores ?? []
-        )
-        .reduce((best, cur) => (cur.length > best.length ? cur : best), [] as {
-          judgeId: number;
-          judgeName: string;
-          score: number | null;
-        }[])
-        .map((j) => ({ judgeId: j.judgeId, judgeName: j.judgeName }));
+    // Union of judges with at least one non-null score anywhere in this
+    // category, sorted by judgeId. The sort matters: a judge who didn't
+    // score the first candidate is discovered on a later row, so insertion
+    // order would print them out of sequence (e.g. J4,J5,...,J3) even
+    // though the cells themselves are correct — the row cells match on
+    // judgeId, not position.
+    const seen = new Map<number, string>();
+    for (const r of sorted) {
+      const cs = r.categoryScores.find((rc) => rc.categoryId === c.categoryId);
+      for (const j of cs?.judgeScores ?? []) {
+        if (j.score != null && !seen.has(j.judgeId)) {
+          seen.set(j.judgeId, j.judgeName);
+        }
+      }
+    }
+    const judges = Array.from(seen.entries())
+      .map(([judgeId, judgeName]) => ({ judgeId, judgeName }))
+      .sort((a, b) => a.judgeId - b.judgeId);
     return {
       categoryId: c.categoryId,
       categoryName: c.categoryName,
@@ -190,6 +201,15 @@ export default function PreliminaryResultsTable({
               label={cat.categoryName}
             />
           </h3>
+          {/* Judge columns only exist for judges who actually scored, so a
+              category nobody has scored yet renders with none at all —
+              say so rather than printing a bare No/Name/Avg/W stub that
+              looks like a broken sheet. */}
+          {cat.judges.length === 0 && (
+            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              No judge has scored this category yet.
+            </p>
+          )}
           <div className="overflow-auto">
             <table
               className="min-w-full border-collapse table-auto"

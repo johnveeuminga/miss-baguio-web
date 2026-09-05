@@ -148,24 +148,35 @@ export default function CombinedResultsTable({
     );
   }
 
-  // The judge columns for a coronation category — real names + ids, taken
-  // from whichever candidate row has the most entries (the backend returns
-  // judgeScores in a consistent per-category order for every row). Showing
+  // The judge columns for a coronation category — real names + ids. Showing
   // the judge's actual name matches the /admin/active Scoresheet and the
   // Preliminaries Tally; a positional "J1" hid which judge a column was.
-  const judgesForCategory = (categoryName: string) =>
-    sorted
-      .map(
-        (r) =>
-          r.coronationCategories?.find((c) => c.categoryName === categoryName)
-            ?.judgeScores ?? []
-      )
-      .reduce((best, cur) => (cur.length > best.length ? cur : best), [] as {
-        judgeId: number;
-        judgeName: string;
-        score: number | null;
-      }[])
-      .map((j) => ({ judgeId: j.judgeId, judgeName: j.judgeName }));
+  //
+  // Only judges who ACTUALLY SCORED the category get a column. The backend
+  // returns an entry for every seated judge whether they scored or not
+  // (score: null for the ones who didn't), so keying columns off "appears
+  // in the payload" printed empty "—" columns for judges who never scored.
+  // The panel size isn't fixed and differs per category, so this unions
+  // across every candidate row rather than trusting any single row, then
+  // sorts by judgeId — a judge who didn't score the first candidate is
+  // discovered on a later row, so insertion order would print them out of
+  // sequence even though the cells (matched on judgeId) stay correct.
+  const judgesForCategory = (categoryName: string) => {
+    const seen = new Map<number, string>();
+    for (const r of sorted) {
+      const cat = r.coronationCategories?.find(
+        (c) => c.categoryName === categoryName
+      );
+      for (const j of cat?.judgeScores ?? []) {
+        if (j.score != null && !seen.has(j.judgeId)) {
+          seen.set(j.judgeId, j.judgeName);
+        }
+      }
+    }
+    return Array.from(seen.entries())
+      .map(([judgeId, judgeName]) => ({ judgeId, judgeName }))
+      .sort((a, b) => a.judgeId - b.judgeId);
+  };
 
   const eveningJudges = judgesForCategory("Evening Wear");
   const swimsuitJudges = judgesForCategory("Swimwear");
@@ -246,6 +257,14 @@ export default function CombinedResultsTable({
               label={sheet.label}
             />
           </h3>
+          {/* Judge columns only exist for judges who actually scored, so a
+              category nobody has scored yet renders with none at all — say
+              so rather than printing a bare No/Name/Avg/W stub. */}
+          {sheet.judges.length === 0 && (
+            <p className="mb-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              No judge has scored this category yet.
+            </p>
+          )}
           <div className="overflow-auto">
             <table
               className="min-w-full border-collapse table-auto"

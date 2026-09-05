@@ -38,11 +38,16 @@ export default function Top5ResultsTable() {
     (a, b) => (a.finalRank ?? 0) - (b.finalRank ?? 0)
   );
 
-  // Build a unique list of judges found in the results and sort by judgeId
+  // Build the judge columns from judges who ACTUALLY SUBMITTED a ranking,
+  // sorted by judgeId. The panel size isn't known ahead of time and judges
+  // finalize at different moments, so anyone without a real rankPosition is
+  // left out entirely rather than given a column of "—" that reads like a
+  // seated judge who scored nothing.
   const judgeMap = new Map<number, string | undefined>();
   for (const r of sorted) {
     if (!r.judgeRankings) continue;
     for (const jr of r.judgeRankings) {
+      if (jr.rankPosition == null) continue;
       if (!judgeMap.has(jr.judgeId)) judgeMap.set(jr.judgeId, jr.judgeName);
     }
   }
