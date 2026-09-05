@@ -19,6 +19,65 @@ export function extractErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+type StagedScore = {
+  candidateId: number;
+  categoryId: number;
+  scoreValue: number;
+};
+
+// Scores a judge has entered but not yet submitted live only on their own
+// device (see debouncedSaveScore). That makes a mid-category tablet crash,
+// accidental reload or browser kill a total loss of everything they'd
+// entered — so the staging map is mirrored into localStorage on every
+// change and restored on mount. Scoped per round so two rounds can't read
+// each other's drafts. Wrapped in try/catch throughout: Safari private
+// mode throws on write, and a judge losing their drafts is bad but a
+// hard crash on the scoring screen mid-event is worse.
+function stagedScoresKey(roundId: number): string {
+  return `mb-staged-scores-round-${roundId}`;
+}
+
+function loadStagedScores(roundId: number): [string, StagedScore][] {
+  try {
+    const raw = localStorage.getItem(stagedScoresKey(roundId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    // Re-validate rather than trusting the blob: a stale entry from an
+    // older shape would otherwise be POSTed verbatim on the next submit.
+    return parsed
+      .filter(
+        (s): s is StagedScore =>
+          !!s &&
+          typeof s === "object" &&
+          typeof (s as StagedScore).candidateId === "number" &&
+          typeof (s as StagedScore).categoryId === "number" &&
+          typeof (s as StagedScore).scoreValue === "number"
+      )
+      .map((s) => [`${s.candidateId}-${s.categoryId}`, s]);
+  } catch {
+    return [];
+  }
+}
+
+function persistStagedScores(
+  roundId: number,
+  pending: Map<string, StagedScore>
+) {
+  try {
+    if (pending.size === 0) {
+      localStorage.removeItem(stagedScoresKey(roundId));
+      return;
+    }
+    localStorage.setItem(
+      stagedScoresKey(roundId),
+      JSON.stringify(Array.from(pending.values()))
+    );
+  } catch {
+    // Out of quota or storage disabled — scoring still works in-memory.
+  }
+}
+
 /**
  * 2026 free-form round scoring (per the Executive Committee): within a
  * round, a judge can score and re-score ANY candidate, in any category of
@@ -39,13 +98,15 @@ export function useRoundScoring(roundId: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Keys ("<candidateId>-<categoryId>") of scores this judge has changed
-  // whose debounced POST hasn't landed yet. A silent background refresh
-  // (below) must not overwrite these with the server's older value — see
-  // the merge in load().
+  // Keys ("<candidateId>-<categoryId>") of scores this judge has entered
+  // that have NOT been sent to the server yet. Scores are deliberately held
+  // client-side until the judge hits Submit for that category — nothing is
+  // POSTed on change (see debouncedSaveScore). A silent background refresh
+  // must not overwrite these with the server's older value — see the merge
+  // in load().
   const pendingSavesRef = useRef<
     Map<string, { candidateId: number; categoryId: number; scoreValue: number }>
-  >(new Map());
+  >(new Map(loadStagedScores(roundId)));
 
   // `silent` skips the loading-spinner flip — used by the live SignalR
   // refresh below, which must NOT yank a mid-scoring judge's screen to a
@@ -161,99 +222,77 @@ export function useRoundScoring(roundId: number) {
     );
   }
 
-  // The score Slider fires onValueChange on ~every pixel of drag, not once
-  // per gesture — a single drag from e.g. 7.0 to 9.5 was firing 20-50+
-  // overlapping POST /api/scoring/scores calls. On venue WiFi (higher
-  // latency/lower bandwidth than dev machines) that flood of concurrent
-  // requests saturates the connection and some come back as a network-level
-  // "Failed to fetch" rather than a clean HTTP error — exactly the bug
-  // reported live on 2026-09-04.
+  // Scores used to POST on every change (debounced ~300ms per candidate/
+  // category, because the Slider fires onValueChange on ~every pixel of a
+  // drag and was flooding venue WiFi with 20-50 overlapping requests per
+  // gesture — reported live 2026-09-04). They are now staged on the
+  // judge's device instead and posted only on Submit, which removes that
+  // flood entirely: a drag costs zero requests no matter how long it is.
   //
-  // Fix: debounce the actual network call per (candidate, category) pair —
-  // each pair gets its own timer so dragging candidate A doesn't cancel or
-  // delay a save in flight for candidate B (all candidates render as
-  // simultaneous cards on this screen, not a one-at-a-time wizard, so more
-  // than one pair can legitimately have a pending save at once). The visible
-  // number still updates on every drag tick via setLocalScore above —
-  // untouched, so dragging feels exactly as instant as before. Only the
-  // network call is coalesced down to the final value, sent ~300ms after
-  // the judge's finger settles.
-  //
-  // pendingSavesRef also backs flushPendingSaves (below), which
-  // submitCategory calls before submitting — so a drag that ends right as
-  // the judge hits Submit still reaches the server first instead of being
-  // silently dropped when its 300ms timer hasn't fired yet.
-  const DEBOUNCE_MS = 300;
-  const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  // pendingSavesRef is declared at the top of the hook — the silent live
-  // refresh in load() needs it too, to avoid clobbering an in-flight edit.
+  // pendingSavesRef (declared at the top of the hook, since the silent
+  // live refresh in load() also needs it) holds the staged scores, mirrored
+  // into localStorage so a tablet crash mid-category doesn't lose them.
 
-  // savingKeys mirrors which (candidate, category) pairs currently have a
-  // save in flight or pending — RoundScoring.tsx's per-slider spinner reads
-  // this instead of managing its own setSavingKey around an awaited call,
-  // since the real network call now happens on a detached timer rather
-  // than inside the caller's own await.
+  // savingKeys mirrors which (candidate, category) pairs are currently
+  // being posted — only ever non-empty during a submit, since that is the
+  // only time scores go over the network.
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
 
+  // NOTE: despite the name (kept so callers don't all have to change), this
+  // no longer posts anything. Scores are staged on the judge's own device
+  // and only reach the server when they submit the category — so a judge
+  // can freely adjust and re-adjust without every change being visible to the
+  // tabulation side, and a mispress is never something an admin has to go
+  // clear out of the database.
+  //
+  // The old onError callback is gone: there is no network call here to
+  // fail. Save errors now surface from submitCategory instead.
   function debouncedSaveScore(
     candidateId: number,
     categoryId: number,
-    scoreValue: number,
-    onError?: (err: unknown) => void
+    scoreValue: number
   ) {
     // Instant, unthrottled visual update — same as before.
     setLocalScore(candidateId, categoryId, scoreValue);
 
     const key = `${candidateId}-${categoryId}`;
     pendingSavesRef.current.set(key, { candidateId, categoryId, scoreValue });
-    setSavingKeys((prev) => new Set(prev).add(key));
-
-    const existing = debounceTimersRef.current.get(key);
-    if (existing) clearTimeout(existing);
-
-    const timer = setTimeout(() => {
-      debounceTimersRef.current.delete(key);
-      const pending = pendingSavesRef.current.get(key);
-      if (!pending) return;
-      pendingSavesRef.current.delete(key);
-      post("/api/scoring/scores", pending, token ?? undefined)
-        .catch((err) => {
-          onError?.(err);
-        })
-        .finally(() => {
-          setSavingKeys((prev) => {
-            const next = new Set(prev);
-            next.delete(key);
-            return next;
-          });
-        });
-    }, DEBOUNCE_MS);
-
-    debounceTimersRef.current.set(key, timer);
+    persistStagedScores(roundId, pendingSavesRef.current);
   }
 
-  // Sends every score still waiting on its debounce timer right now,
-  // skipping the delay — used before a category Submit (so a drag that
-  // just ended isn't lost under the completeness check) and on unmount.
-  const flushPendingSaves = useCallback(async () => {
-    const pending = Array.from(pendingSavesRef.current.values());
-    debounceTimersRef.current.forEach((timer) => clearTimeout(timer));
-    debounceTimersRef.current.clear();
-    pendingSavesRef.current.clear();
-    setSavingKeys(new Set());
-    await Promise.all(
-      pending.map((p) =>
-        post("/api/scoring/scores", p, token ?? undefined)
-      )
-    );
-  }, [token]);
+  // Sends staged scores to the server. This is the ONLY place scores are
+  // posted — submitCategory calls it immediately before submitting.
+  //
+  // Pass a categoryId to send just that category's scores (what Submit
+  // does — submitting Swimwear must not also push half-finished Evening
+  // Wear scores). Omit it to send everything staged for the round.
+  //
+  // Staged entries are only dropped once their POST has actually
+  // succeeded: if the network fails mid-submit the scores stay in
+  // localStorage and the judge can retry, rather than being silently lost
+  // between a cleared cache and a submit that never landed.
+  const flushPendingSaves = useCallback(
+    async (categoryId?: number) => {
+      const pending = Array.from(pendingSavesRef.current.entries()).filter(
+        ([, p]) => categoryId == null || p.categoryId === categoryId
+      );
+      if (pending.length === 0) return;
 
-  useEffect(() => {
-    const timers = debounceTimersRef.current;
-    return () => {
-      timers.forEach((timer) => clearTimeout(timer));
-    };
-  }, []);
+      setSavingKeys(new Set(pending.map(([key]) => key)));
+      try {
+        await Promise.all(
+          pending.map(async ([key, p]) => {
+            await post("/api/scoring/scores", p, token ?? undefined);
+            pendingSavesRef.current.delete(key);
+          })
+        );
+      } finally {
+        persistStagedScores(roundId, pendingSavesRef.current);
+        setSavingKeys(new Set());
+      }
+    },
+    [token, roundId]
+  );
 
   // Kept for anything still calling it, but no longer what the primary
   // scoring screen uses — submission is now per-category (see
@@ -277,11 +316,13 @@ export function useRoundScoring(roundId: number) {
   // Submits ONE category independently — doesn't require any other
   // category in the round to be scored or even scoreable.
   async function submitCategory(categoryId: number) {
-    // Flush first: a drag that just ended may still be sitting in its
-    // 300ms debounce window (see debouncedSaveScore) — without this, the
-    // completeness check on the server could run before that last score
-    // actually lands, or the score could be lost outright.
-    await flushPendingSaves();
+    // Scores are staged locally and never posted on change, so this is
+    // where the judge's entire category actually reaches the server —
+    // scoped to this category so a half-finished other category isn't
+    // pushed along with it. If any POST fails, the throw propagates to the
+    // caller's toast and the scores stay staged for a retry; the category
+    // is NOT marked submitted behind a failed save.
+    await flushPendingSaves(categoryId);
     await post(
       `/api/scoring/categories/${categoryId}/submit`,
       {},

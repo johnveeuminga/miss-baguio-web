@@ -257,14 +257,10 @@ export default function RoundScoring() {
 
   function handleScoreChange(candidateId: number, value: number) {
     if (!categoryId || locked || scoringBlocked) return;
-    // Debounced: the visible number updates immediately (inside
-    // debouncedSaveScore), but the actual POST is coalesced to fire once
-    // ~300ms after the judge stops dragging, instead of once per drag
-    // frame — see useRoundScoring's debouncedSaveScore doc comment for why.
-    debouncedSaveScore(candidateId, categoryId, value, (err) => {
-      toast.error(extractErrorMessage(err, "Failed to save score"));
-      void reload();
-    });
+    // Staged locally only — nothing is posted until this category is
+    // submitted (see useRoundScoring's debouncedSaveScore). No error
+    // callback because there is no network call here to fail.
+    debouncedSaveScore(candidateId, categoryId, value);
   }
 
   // Seed the whole roster at the category's minimum (7.0) as soon as this
@@ -277,18 +273,22 @@ export default function RoundScoring() {
   // and moved on left NO score saved at all. Seeding on open made "leave it
   // alone" and "explicitly want the minimum" the same outcome.
   //
-  // Now the whole panel is seeded up front instead, so a judge only ever
-  // adjusts away from 7.0 rather than establishing a score from nothing.
+  // The seed is now purely LOCAL — it stages 7.0 for every candidate on the
+  // judge's own device without posting anything, so a judge only ever
+  // adjusts away from 7.0 rather than establishing a score from nothing,
+  // and the tabulation side sees nothing until they submit. Every staged
+  // 7.0 is posted along with the edited ones at that point, so "left at
+  // the default" still lands as a real score.
+  //
   // Consequence worth knowing: categoryProgress and the Submit gate below
-  // count saved rows, so a category reads as complete — and Submit unlocks
-  // — as soon as this runs, before a judge has looked at anyone. They no
-  // longer distinguish "judged" from "untouched"; per-judge submission
-  // status is the only signal that a panel actually scored.
+  // count filled values, so a category reads as complete — and Submit
+  // unlocks — as soon as this runs, before a judge has looked at anyone.
+  // They no longer distinguish "judged" from "untouched"; per-judge
+  // submission status is the only signal that a panel actually scored.
   //
   // Guarded per (round, category) so it seeds once per category rather than
   // re-firing on every render or refetch, and skipped entirely while the
-  // category is locked or scoring isn't open — never write into a category
-  // the API would reject anyway.
+  // category is locked or scoring isn't open.
   const seededCategoriesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!data || categoryId == null || locked || scoringBlocked) return;
@@ -308,15 +308,7 @@ export default function RoundScoring() {
 
     seededCategoriesRef.current.add(seedKey);
     for (const candidate of unscored) {
-      debouncedSaveScore(
-        candidate.candidateId,
-        categoryId,
-        category.minScore,
-        (err) => {
-          toast.error(extractErrorMessage(err, "Failed to save score"));
-          void reload();
-        }
-      );
+      debouncedSaveScore(candidate.candidateId, categoryId, category.minScore);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per category once it's open; re-running on every data refetch would fight in-flight edits
   }, [data, categoryId, locked, scoringBlocked, roundId]);
