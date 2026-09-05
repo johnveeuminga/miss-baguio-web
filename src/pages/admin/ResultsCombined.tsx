@@ -57,6 +57,13 @@ type ViewId = (typeof VIEWS)[number]["id"];
 // nothing to strip — so the toggle is hidden while they're selected.
 const MODE_AWARE_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary"]);
 
+// Which views need landscape on print. Combined/Preliminary Detailed are
+// the classic case, but "Top 7 — Per-Judge Ranks" is just as wide — 5 fixed
+// columns plus one per judge, up to 9 — even though it has no Detailed/
+// Announce toggle. Everything else (Final Titles, Top 7 Finalists, Special
+// Awards) is a narrow 3-4 column placement list that's fine in portrait.
+const LANDSCAPE_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary", "top5"]);
+
 export default function ResultsCombined() {
   const [view, setView] = useState<ViewId>("combined");
   const [mode, setMode] = useState<ResultsMode>("detailed");
@@ -184,10 +191,12 @@ export default function ResultsCombined() {
    point is to stop those two columns from eating the page. */
 .print-only { display: none; }
 @media print { .screen-only { display: none !important; } .print-only { display: inline !important; } }`}</style>
-      {/* Detailed needs landscape; announce must stay portrait. @page can't
-          be conditioned on a selector, so the size is swapped by injecting
-          the rule that matches the mode actually being printed. */}
-      {modeApplies && mode === "detailed" ? (
+      {/* Wide, judge-per-column views need landscape; narrow placement
+          lists (and Announce mode, which strips those columns back down)
+          stay portrait. @page can't be conditioned on a selector, so the
+          size is swapped by injecting the rule that matches whatever's
+          actually being printed. */}
+      {LANDSCAPE_VIEWS.has(view) && !(modeApplies && mode === "announce") ? (
         <style>{`@page { size: A4 landscape; margin: 8mm; }`}</style>
       ) : (
         <style>{`@page { size: A4 portrait; margin: 10mm; }`}</style>
