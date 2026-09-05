@@ -3,6 +3,7 @@ import { get } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import type { CandidateFullTableDto, ResultsMode } from "./types";
 import { cn } from "@/lib/utils";
+import SectionPrintButton from "./SectionPrintButton";
 
 /**
  * Preliminaries-only tally (Q&A + Creative Costume) — so the admin/EC can
@@ -176,10 +177,18 @@ export default function PreliminaryResultsTable({
           each mirrors the /admin/active Scoresheet so the print matches the
           on-screen look the panel is used to. */}
       {categoryDefs.map((cat) => (
-        <section key={`sheet-${cat.categoryId}`} className="break-inside-avoid">
-          <h3 className="mb-2 text-sm font-semibold">
+        <section
+          key={`sheet-${cat.categoryId}`}
+          className="break-inside-avoid"
+          data-print-section={`prelim-cat-${cat.categoryId}`}
+        >
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
             {cat.categoryName}
             {cat.weightPercentage != null ? ` — ${cat.weightPercentage}%` : ""}
+            <SectionPrintButton
+              sectionKey={`prelim-cat-${cat.categoryId}`}
+              label={cat.categoryName}
+            />
           </h3>
           <div className="overflow-auto">
             <table
@@ -264,14 +273,15 @@ export default function PreliminaryResultsTable({
       {/* Combined Preliminaries tally — the per-category weighted
           contributions (20% + 20%) summed into the Preliminaries Total the
           Top 7 cut is read off. */}
-      <section className="break-inside-avoid">
-        <h3 className="mb-2 text-sm font-semibold">
+      <section className="break-inside-avoid" data-print-section="prelim-tally">
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
           Preliminaries Tally
           {categoryDefs.length > 0
             ? ` — ${categoryDefs
                 .map((c) => `${c.categoryName} ${c.weightPercentage ?? "?"}%`)
                 .join(" + ")}`
             : ""}
+          <SectionPrintButton sectionKey="prelim-tally" label="Preliminaries Tally" />
         </h3>
         <div className="overflow-auto">
           <table

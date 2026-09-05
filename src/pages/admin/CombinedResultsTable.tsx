@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/authStore";
 import type { CandidateCombinedResultDto, ResultsMode } from "./types";
 import { cn } from "@/lib/utils";
 import { AlertTriangle } from "lucide-react";
+import SectionPrintButton from "./SectionPrintButton";
 
 export default function CombinedResultsTable({
   mode = "detailed",
@@ -233,8 +234,18 @@ export default function CombinedResultsTable({
       )}
 
       {categorySheets.map((sheet) => (
-        <section key={sheet.key} className="break-inside-avoid">
-          <h3 className="mb-2 text-sm font-semibold">{sheet.label}</h3>
+        <section
+          key={sheet.key}
+          className="break-inside-avoid"
+          data-print-section={`combined-${sheet.key}`}
+        >
+          <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+            {sheet.label}
+            <SectionPrintButton
+              sectionKey={`combined-${sheet.key}`}
+              label={sheet.label}
+            />
+          </h3>
           <div className="overflow-auto">
             <table
               className="min-w-full border-collapse table-auto"
@@ -311,8 +322,11 @@ export default function CombinedResultsTable({
       {/* Combined tally — Morning + Coronation weighted totals -> final
           rank. No judge columns here, so it stays compact regardless of
           panel size. */}
-      <section className="break-inside-avoid">
-        <h3 className="mb-2 text-sm font-semibold">Overall Tally</h3>
+      <section className="break-inside-avoid" data-print-section="combined-tally">
+        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          Overall Tally
+          <SectionPrintButton sectionKey="combined-tally" label="Overall Tally" />
+        </h3>
         <div className="overflow-auto">
           <table
             className="min-w-full border-collapse table-auto"
