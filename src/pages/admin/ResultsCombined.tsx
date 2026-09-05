@@ -190,7 +190,17 @@ export default function ResultsCombined() {
    visibility) so the hidden variant takes up no width at all — the whole
    point is to stop those two columns from eating the page. */
 .print-only { display: none; }
-@media print { .screen-only { display: none !important; } .print-only { display: inline !important; } }`}</style>
+@media print { .screen-only { display: none !important; } .print-only { display: inline !important; } }
+/* Per-section print: SectionPrintButton finds every OTHER
+   [data-print-section] sibling and stamps data-print-hide="1" directly on
+   them right before calling window.print(), then removes it afterward — so
+   a single scoresheet section (one category, or the tally) can be printed
+   on its own instead of the whole stack. Doing the "which one is the odd
+   one out" comparison in JS (rather than a CSS selector) means this needs
+   no per-key rule here and keeps working automatically as sections are
+   added/renamed. The normal "print everything" button never sets this
+   attribute, so it's untouched. */
+@media print { .printable [data-print-hide="1"] { display: none !important; } }`}</style>
       {/* Wide, judge-per-column views need landscape; narrow placement
           lists (and Announce mode, which strips those columns back down)
           stay portrait. @page can't be conditioned on a selector, so the
