@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, Printer } from "lucide-react";
+import { ChevronLeft, Printer, RectangleHorizontal, RectangleVertical } from "lucide-react";
 import MissBaguioResultsTable from "./MissBaguioResultsTable";
 import CombinedResultsTable from "./CombinedResultsTable";
 import PreliminaryResultsTable from "./PreliminaryResultsTable";
@@ -57,18 +57,37 @@ type ViewId = (typeof VIEWS)[number]["id"];
 // nothing to strip — so the toggle is hidden while they're selected.
 const MODE_AWARE_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary"]);
 
-// Which views need landscape on print. Combined/Preliminary Detailed are
-// the classic case, but "Top 7 — Per-Judge Ranks" is just as wide — 5 fixed
-// columns plus one per judge, up to 9 — even though it has no Detailed/
-// Announce toggle. Everything else (Final Titles, Top 7 Finalists, Special
-// Awards) is a narrow 3-4 column placement list that's fine in portrait.
-const LANDSCAPE_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary", "top5"]);
+// Which views default to landscape when first selected. Combined/Preliminary
+// Detailed are the classic case, but "Top 7 — Per-Judge Ranks" is just as
+// wide — 5 fixed columns plus one per judge, up to 9 — even though it has no
+// Detailed/Announce toggle. Everything else (Final Titles, Top 7 Finalists,
+// Special Awards) is a narrow 3-4 column placement list that defaults to
+// portrait. This is only a starting point per view — the toggle below always
+// lets it be overridden, since only the person at the printer really knows
+// what paper/margins they're dealing with.
+const LANDSCAPE_DEFAULT_VIEWS: ReadonlySet<ViewId> = new Set(["combined", "preliminary", "top5"]);
+
+type Orientation = "portrait" | "landscape";
 
 export default function ResultsCombined() {
   const [view, setView] = useState<ViewId>("combined");
   const [mode, setMode] = useState<ResultsMode>("detailed");
+  // Manual, not derived — switching views/mode re-seeds a sensible default
+  // (see the effect below) but never fights a choice the user just made.
+  const [orientation, setOrientation] = useState<Orientation>("landscape");
   const activeView = VIEWS.find((v) => v.id === view)!;
   const modeApplies = MODE_AWARE_VIEWS.has(view);
+
+  // Re-seed the default whenever the view (or, for mode-aware views, the
+  // Announce/Detailed toggle) changes — but only as a starting suggestion.
+  // Once seeded, the print button below leaves it alone until the next view
+  // switch, so a manual override sticks for as many prints as needed.
+  useEffect(() => {
+    const wantsLandscape =
+      LANDSCAPE_DEFAULT_VIEWS.has(view) && !(modeApplies && mode === "announce");
+    setOrientation(wantsLandscape ? "landscape" : "portrait");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, mode]);
 
   function handlePrint() {
     window.print();
@@ -119,6 +138,40 @@ export default function ResultsCombined() {
               </button>
             </div>
           )}
+          {/* Manual orientation override — the per-view default above is
+              just a guess, and only the person at the printer knows what
+              they actually need (combining sheets, a different paper size,
+              etc.), so this always wins regardless of view/mode. */}
+          <div className="inline-flex rounded-md border p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setOrientation("portrait")}
+              title="Portrait"
+              aria-pressed={orientation === "portrait"}
+              className={
+                "px-2 py-1 rounded-sm font-medium transition-colors inline-flex items-center gap-1 " +
+                (orientation === "portrait"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              <RectangleVertical className="size-3.5" /> Portrait
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrientation("landscape")}
+              title="Landscape"
+              aria-pressed={orientation === "landscape"}
+              className={
+                "px-2 py-1 rounded-sm font-medium transition-colors inline-flex items-center gap-1 " +
+                (orientation === "landscape"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              <RectangleHorizontal className="size-3.5" /> Landscape
+            </button>
+          </div>
           <Button onClick={handlePrint} variant="outline" size="sm">
             <Printer className="size-4" /> Print
           </Button>
@@ -191,12 +244,11 @@ export default function ResultsCombined() {
    point is to stop those two columns from eating the page. */
 .print-only { display: none; }
 @media print { .screen-only { display: none !important; } .print-only { display: inline !important; } }`}</style>
-      {/* Wide, judge-per-column views need landscape; narrow placement
-          lists (and Announce mode, which strips those columns back down)
-          stay portrait. @page can't be conditioned on a selector, so the
-          size is swapped by injecting the rule that matches whatever's
-          actually being printed. */}
-      {LANDSCAPE_VIEWS.has(view) && !(modeApplies && mode === "announce") ? (
+      {/* Orientation is a manual toggle (see the Portrait/Landscape buttons
+          above) seeded with a sensible per-view default. @page can't be
+          conditioned on a selector, so the size is swapped by injecting the
+          rule that matches whatever orientation is currently selected. */}
+      {orientation === "landscape" ? (
         <style>{`@page { size: A4 landscape; margin: 8mm; }`}</style>
       ) : (
         <style>{`@page { size: A4 portrait; margin: 10mm; }`}</style>
