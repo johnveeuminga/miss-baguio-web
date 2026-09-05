@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,9 @@ import { LoadingView, ErrorView } from "@/components/ui/status-view";
 import { ROUNDS } from "@/lib/rounds";
 import { useRoundScoring, extractErrorMessage } from "@/hooks/useRoundScoring";
 import { useScoringControl } from "@/hooks/useScoringControl";
-import { useScoringHubConnection } from "@/hooks/useScoringHubConnection";
-import { get } from "@/lib/api";
-import { useAuthStore } from "@/store/authStore";
-import { ChevronLeft, ChevronRight, CheckCircle2, Lock, AlertTriangle, Minus, Plus, Radio } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Lock, AlertTriangle, Minus, Plus, Save } from "lucide-react";
 import { toast } from "sonner";
-import type { RoundCategoryDto, ScoringSessionDto, MyRoundCandidateScoresDto } from "@/types/scoring";
+import type { RoundCategoryDto, MyRoundCandidateScoresDto } from "@/types/scoring";
 
 // Rounds a raw value to the category's step (avoids float drift like
 // 8.099999999999998) and clamps it inside [min, max] — shared by the
@@ -199,6 +196,13 @@ const CORONATION_ROUND_ID = 2;
  * whole round. This replaces the old one-candidate-at-a-time live-session
  * screen (see git history for FinalsScoring.tsx / useScoring.tsx, which
  * are kept only for JudgeHome's "who's currently on stage" display).
+ *
+ * Layout is two columns: the roster on the right, and the candidate the
+ * judge picked from it — big photo + score entry — on the left. Admin's
+ * "on stage" session used to force a featured candidate to the top of this
+ * screen; that's gone entirely (2026-09-05), because it meant a judge
+ * couldn't settle on who they were scoring without admin driving it. The
+ * judge alone decides who's selected here by tapping a card.
  */
 export default function RoundScoring() {
   const { roundId: roundIdParam } = useParams<{ roundId?: string }>();
@@ -212,6 +216,7 @@ export default function RoundScoring() {
     error,
     reload,
     debouncedSaveScore,
+    flushPendingSaves,
     savingKeys,
     submitCategory,
     requestCategoryCorrection,
@@ -219,52 +224,16 @@ export default function RoundScoring() {
     categorySubmission,
   } = useRoundScoring(roundInvalid ? -1 : roundId);
   const { control: scoringControl, loading: scoringControlLoading } = useScoringControl();
-  const token = useAuthStore((s) => s.token);
-
-  // Who admin currently has "on stage" for this round — purely a visual
-  // cue (a star next to that candidate's row) so it's still noticeable
-  // even though judges can freely score anyone. Live-updates via the same
-  // ActiveCandidateChanged broadcast JudgeHome already listens for.
-  const [activeSession, setActiveSession] = useState<ScoringSessionDto | null>(null);
-  const loadActiveSession = useCallback(async () => {
-    if (roundInvalid) return;
-    try {
-      const res = (await get(
-        `/api/scoring/session/active/${roundId}`,
-        token ?? undefined
-      )) as ScoringSessionDto;
-      setActiveSession(res);
-    } catch {
-      // 404 = no active session right now — that's a normal state, not an error.
-      setActiveSession(null);
-    }
-  }, [roundId, roundInvalid, token]);
-
-  useEffect(() => {
-    void loadActiveSession();
-  }, [loadActiveSession]);
-
-  const hubConnection = useScoringHubConnection(token);
-  useEffect(() => {
-    if (!hubConnection) return;
-    const onChanged = () => void loadActiveSession();
-    hubConnection.on("ActiveCandidateChanged", onChanged);
-    hubConnection.onreconnected(onChanged);
-    return () => {
-      hubConnection.off("ActiveCandidateChanged", onChanged);
-    };
-  }, [hubConnection, loadActiveSession]);
-
-  // No roundId field on ScoringSessionDto — the round is already scoped by
-  // the fetch's URL path (/session/active/{roundId}), so whatever comes
-  // back is already for this round.
-  const activeCandidateId = activeSession?.candidateId ?? null;
 
   const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [expandedCandidateId, setExpandedCandidateId] = useState<number | null>(null);
+  // Who the judge is currently scoring in the left column. Null = nobody
+  // picked yet, so the left column shows a "pick someone" placeholder and
+  // the roster on the right is the whole screen's focus.
+  const [selectedCandidateId, setSelectedCandidateId] = useState<number | null>(null);
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [confirmCorrectionOpen, setConfirmCorrectionOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [savingNow, setSavingNow] = useState(false);
 
   // The one category admin currently has open for scoring (per the
   // Executive Committee: avoid mis-scoring the wrong category from a
@@ -326,6 +295,25 @@ export default function RoundScoring() {
     });
   }
 
+  // Scores already autosave on a ~300ms debounce (and an unscored candidate
+  // is saved at minScore the moment her card opens — deliberate EC rule,
+  // see ScoreEntry). This button doesn't change that model; it forces any
+  // score still sitting in its debounce window to the server right now and
+  // confirms it landed, so a judge who wants to see "saved" before moving
+  // to the next candidate has something to press instead of guessing.
+  async function handleSaveNow() {
+    setSavingNow(true);
+    try {
+      await flushPendingSaves();
+      toast.success("Scores saved.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err, "Failed to save scores"));
+      void reload();
+    } finally {
+      setSavingNow(false);
+    }
+  }
+
   async function handleSubmit() {
     if (!categoryId) return;
     setSubmitting(true);
@@ -355,7 +343,7 @@ export default function RoundScoring() {
   }
 
   return (
-    <div className="p-3 max-w-3xl mx-auto pb-28">
+    <div className="p-3 max-w-5xl mx-auto pb-28">
       <div className="flex items-center justify-between mb-4">
         <Button variant="ghost" onClick={() => navigate("/judge/home")}>
           <ChevronLeft className="size-4" />
@@ -388,8 +376,9 @@ export default function RoundScoring() {
           <div className="mb-4">
             <h1 className="text-xl font-bold">{roundLabel}</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Score any candidate, in any order. Nothing is final until you
-              submit the whole round.
+              Tap a candidate to score her. Any candidate, any order,
+              re-score as often as you like — nothing is final until you
+              submit the category.
             </p>
           </div>
 
@@ -449,33 +438,30 @@ export default function RoundScoring() {
           )}
 
           {(() => {
-            const featured = activeCandidateId
-              ? data.candidates.find((c) => c.candidateId === activeCandidateId) ?? null
+            const selected = selectedCandidateId
+              ? data.candidates.find((c) => c.candidateId === selectedCandidateId) ?? null
               : null;
-            const rest = featured
-              ? data.candidates.filter((c) => c.candidateId !== featured.candidateId)
-              : data.candidates;
-            // Split the remaining 15 into two columns — first column gets
-            // the extra one when the count is odd (8/7), so the columns
-            // read top-to-bottom in candidate order rather than
-            // alternating left/right.
-            const mid = Math.ceil(rest.length / 2);
-            const columnA = rest.slice(0, mid);
-            const columnB = rest.slice(mid);
 
-            function renderCompactRow(candidate: MyRoundCandidateScoresDto) {
+            function renderRosterCard(candidate: MyRoundCandidateScoresDto) {
               const score = candidate.scores.find((s) => s.categoryId === categoryId);
               const value = score?.scoreValue ?? null;
-              const expanded = expandedCandidateId === candidate.candidateId;
-              const key = `${candidate.candidateId}-${categoryId}`;
-              const isSaving = savingKeys.has(key);
+              const isSelected = selectedCandidateId === candidate.candidateId;
+              const isSaving = savingKeys.has(`${candidate.candidateId}-${categoryId}`);
 
               return (
-                <Card key={candidate.candidateId}>
+                <Card
+                  key={candidate.candidateId}
+                  className={
+                    isSelected ? "border-primary ring-2 ring-primary/40" : ""
+                  }
+                >
                   <button
                     type="button"
+                    // Tapping the selected candidate again clears the left
+                    // column — "returnable": the judge can always get back
+                    // to a plain roster without scoring anyone.
                     onClick={() =>
-                      setExpandedCandidateId((cur) =>
+                      setSelectedCandidateId((cur) =>
                         cur === candidate.candidateId ? null : candidate.candidateId
                       )
                     }
@@ -495,95 +481,103 @@ export default function RoundScoring() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="shrink-0">
                       {value != null ? (
-                        <span className="text-sm font-bold text-primary">{value.toFixed(1)}</span>
+                        <span
+                          className={`text-sm font-bold ${
+                            isSaving ? "text-muted-foreground" : "text-primary"
+                          }`}
+                        >
+                          {value.toFixed(1)}
+                        </span>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">—</span>
                       )}
-                      <ChevronRight
-                        className={`size-3.5 text-muted-foreground transition-transform ${
-                          expanded ? "rotate-90" : ""
-                        }`}
-                      />
                     </div>
                   </button>
-
-                  {expanded && selectedCategory && (
-                    <CardContent className="pt-0 pb-4">
-                      <ScoreEntry
-                        key={key}
-                        value={value}
-                        category={selectedCategory}
-                        isSaving={isSaving}
-                        disabled={locked || scoringBlocked}
-                        onChange={(v) => void handleScoreChange(candidate.candidateId, v)}
-                      />
-                    </CardContent>
-                  )}
                 </Card>
               );
             }
 
             return (
-              <>
-                {/* Featured on-stage candidate — admin-controlled, pulled
-                    out of the list and shown big + already expanded at the
-                    top so the judge doesn't have to scroll to find whoever
-                    is currently presenting. Purely a UI convenience: she's
-                    not scored any differently than anyone else. */}
-                {featured &&
-                  (() => {
-                    const score = featured.scores.find((s) => s.categoryId === categoryId);
-                    const value = score?.scoreValue ?? null;
-                    const key = `${featured.candidateId}-${categoryId}`;
-                    const isSaving = savingKeys.has(key);
-                    return (
-                      <Card className="mb-4 border-primary ring-1 ring-primary/40">
-                        <CardContent className="pt-4">
-                          <div className="flex items-center gap-2 mb-3 text-primary text-xs font-semibold uppercase tracking-wide">
-                            <Radio className="size-3.5" />
-                            On stage now
-                          </div>
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="size-20 rounded-md overflow-hidden shrink-0 bg-muted">
-                              <CandidatePhoto photoUrl={featured.photoUrl} name={featured.candidateName} />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-lg truncate">
-                                <span className="text-muted-foreground font-normal">#{featured.candidateNo}</span>{" "}
-                                {featured.candidateName}
+              // Left = the candidate being scored, right = the roster. Both
+              // columns are always side by side (no stacking breakpoint) —
+              // this screen is used on a tablet, and the judge needs the
+              // roster visible while scoring so switching candidates is one
+              // tap, never a scroll hunt.
+              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 items-start">
+                {/* Selected candidate + score entry. Sticky so a long
+                    roster scrolling on the right can't push the slider off
+                    screen. */}
+                <div className="sticky top-3">
+                  {selected && selectedCategory ? (
+                    (() => {
+                      const score = selected.scores.find((s) => s.categoryId === categoryId);
+                      const value = score?.scoreValue ?? null;
+                      const key = `${selected.candidateId}-${categoryId}`;
+                      const isSaving = savingKeys.has(key);
+                      return (
+                        <Card className="border-primary ring-1 ring-primary/40">
+                          <CardContent className="pt-4">
+                            <div className="flex items-center gap-3 mb-4">
+                              <div className="size-20 rounded-md overflow-hidden shrink-0 bg-muted">
+                                <CandidatePhoto photoUrl={selected.photoUrl} name={selected.candidateName} />
                               </div>
-                              {featured.barangay && (
-                                <div className="text-sm text-muted-foreground truncate">
-                                  {featured.barangay}
+                              <div className="min-w-0">
+                                <div className="font-bold text-lg truncate">
+                                  <span className="text-muted-foreground font-normal">#{selected.candidateNo}</span>{" "}
+                                  {selected.candidateName}
                                 </div>
-                              )}
+                                {selected.barangay && (
+                                  <div className="text-sm text-muted-foreground truncate">
+                                    {selected.barangay}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                          {selectedCategory && (
                             <ScoreEntry
                               key={key}
                               value={value}
                               category={selectedCategory}
                               isSaving={isSaving}
                               disabled={locked || scoringBlocked}
-                              onChange={(v) => void handleScoreChange(featured.candidateId, v)}
+                              onChange={(v) => void handleScoreChange(selected.candidateId, v)}
                             />
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })()}
-
-                {/* Everyone else — compact, tap-to-expand, split into two
-                    columns (8/7 for 15 remaining) so the full roster is
-                    scannable without a long single-column scroll. */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-2">{columnA.map(renderCompactRow)}</div>
-                  <div className="space-y-2">{columnB.map(renderCompactRow)}</div>
+                            <Button
+                              type="button"
+                              className="w-full mt-4 h-12"
+                              onClick={handleSaveNow}
+                              disabled={locked || scoringBlocked || savingNow}
+                            >
+                              <Save className="size-4" />
+                              {savingNow ? "Saving…" : "Save"}
+                            </Button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCandidateId(null)}
+                              className="w-full mt-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+                            >
+                              Back to candidate list
+                            </button>
+                          </CardContent>
+                        </Card>
+                      );
+                    })()
+                  ) : (
+                    <Card className="border-dashed">
+                      <CardContent className="py-10 text-center text-sm text-muted-foreground">
+                        Tap a candidate to score her.
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
-              </>
+
+                {/* Roster — every candidate, always visible, tap to load
+                    into the left column. */}
+                <div className="space-y-2">
+                  {data.candidates.map(renderRosterCard)}
+                </div>
+              </div>
             );
           })()}
         </>
