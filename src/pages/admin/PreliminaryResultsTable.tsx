@@ -195,13 +195,17 @@ export default function PreliminaryResultsTable({
                       key={`h-${cat.categoryId}-${j.judgeId}-${i}`}
                       className="border px-2 py-1 text-right whitespace-nowrap"
                     >
-                      {/* Real name on screen, J1..Jn on paper — see the note
-                          in CombinedResultsTable: judge-name headers are what
-                          push a wide scoresheet off the page. */}
-                      <span className="screen-only">
-                        {j.judgeName || `J${i + 1}`}
-                      </span>
-                      <span className="print-only">{`J${i + 1}`}</span>
+                      {/* Print used to show a positional J1..Jn label here
+                          while screen showed the real name for that same
+                          column. Columns are ordered by claim/seat order,
+                          not by anything in a judge's name — so when a
+                          judge's actual account name happens to already be
+                          "Judge 1"/"Judge 2"/etc (a placeholder from setup),
+                          a seat-order J1..Jn label can contradict the name
+                          and read as if scores were swapped between judges.
+                          Print now shows the same real name as screen —
+                          reported live 2026-09-05. */}
+                      {j.judgeName || `J${i + 1}`}
                     </th>
                   ))}
                   <th className="border px-2 py-1 text-right">Avg</th>

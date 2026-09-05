@@ -244,17 +244,22 @@ export default function CombinedResultsTable({
                 <tr>
                   <th className="border px-2 py-1 text-left">No</th>
                   <th className="border px-2 py-1 text-left">Name</th>
-                  {/* Screen shows the judge's real name; print always
-                      collapses to J1..Jn to keep the sheet tight. */}
+                  {/* Print used to collapse to a positional J1..Jn label
+                      here while screen showed the real name for that same
+                      column — see the note in PreliminaryResultsTable:
+                      columns are ordered by claim/seat order, not by
+                      anything in a judge's name, so a seat-order label can
+                      contradict a judge whose actual account name already
+                      contains a number (a "Judge 1"/"Judge 2" placeholder
+                      from setup), reading as if scores were swapped.
+                      Reported live 2026-09-05 — print now shows the same
+                      real name as screen. */}
                   {sheet.judges.map((j, i) => (
                     <th
                       key={`${sheet.key}-j${j.judgeId}-${i}`}
                       className="border px-2 py-1 text-right whitespace-nowrap"
                     >
-                      <span className="screen-only">
-                        {j.judgeName || `J${i + 1}`}
-                      </span>
-                      <span className="print-only">{`J${i + 1}`}</span>
+                      {j.judgeName || `J${i + 1}`}
                     </th>
                   ))}
                   <th className="border px-2 py-1 text-right">Avg</th>
