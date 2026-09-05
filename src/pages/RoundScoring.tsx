@@ -7,7 +7,7 @@ import { LoadingView, ErrorView } from "@/components/ui/status-view";
 import { ROUNDS } from "@/lib/rounds";
 import { useRoundScoring, extractErrorMessage } from "@/hooks/useRoundScoring";
 import { useScoringControl } from "@/hooks/useScoringControl";
-import { ChevronLeft, CheckCircle2, Lock, AlertTriangle, Minus, Plus, Save } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Lock, AlertTriangle, Minus, Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { RoundCategoryDto, MyRoundCandidateScoresDto } from "@/types/scoring";
 
@@ -93,35 +93,9 @@ function ScoreEntry({
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
-  // This card only renders once a judge actually opens it (expanded compact
-  // row, or the always-open featured/on-stage card) — at that moment the
-  // readout below shows category.minScore as a fallback for an unscored
-  // candidate (value == null). A judge who reads that number, decides it's
-  // already correct, and moves on without touching the slider was leaving
-  // that candidate with NO score saved at all — the display was faking a
-  // value that was never sent, indistinguishable on-screen from a real
-  // score. Reported live 2026-09-04.
-  //
-  // Fix: the instant this card is shown for a still-unscored candidate,
-  // save category.minScore for real — matching exactly what's already on
-  // screen, so "leave it alone" and "explicitly want the minimum" are the
-  // same outcome instead of one of them silently losing the score. Guarded
-  // to fire only once per mount (not on every re-render) and skipped
-  // entirely while disabled (locked/submitted category, or scoring not
-  // open) — never auto-save into a category the judge can't actually save
-  // into anyway. Both call sites key this component by candidate+category
-  // so it remounts (and this fires again) per candidate, since the
-  // featured/on-stage card reuses the same element across whichever
-  // candidate admin currently has live rather than unmounting between them.
-  const hasAutoSavedRef = useRef(false);
-  useEffect(() => {
-    if (value == null && !disabled && !hasAutoSavedRef.current) {
-      hasAutoSavedRef.current = true;
-      onChange(category.minScore);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // The minScore default is no longer seeded here (per-card, on open) —
+  // it's seeded for the whole roster at once when the category opens, up in
+  // RoundScoring. See the seeding effect there for why.
   return (
     <div>
       <div className="flex items-center justify-center mb-3">
@@ -216,7 +190,6 @@ export default function RoundScoring() {
     error,
     reload,
     debouncedSaveScore,
-    flushPendingSaves,
     savingKeys,
     submitCategory,
     requestCategoryCorrection,
@@ -233,7 +206,6 @@ export default function RoundScoring() {
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [confirmCorrectionOpen, setConfirmCorrectionOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [savingNow, setSavingNow] = useState(false);
 
   // The one category admin currently has open for scoring (per the
   // Executive Committee: avoid mis-scoring the wrong category from a
@@ -295,24 +267,59 @@ export default function RoundScoring() {
     });
   }
 
-  // Scores already autosave on a ~300ms debounce (and an unscored candidate
-  // is saved at minScore the moment her card opens — deliberate EC rule,
-  // see ScoreEntry). This button doesn't change that model; it forces any
-  // score still sitting in its debounce window to the server right now and
-  // confirms it landed, so a judge who wants to see "saved" before moving
-  // to the next candidate has something to press instead of guessing.
-  async function handleSaveNow() {
-    setSavingNow(true);
-    try {
-      await flushPendingSaves();
-      toast.success("Scores saved.");
-    } catch (err) {
-      toast.error(extractErrorMessage(err, "Failed to save scores"));
-      void reload();
-    } finally {
-      setSavingNow(false);
+  // Seed the whole roster at the category's minimum (7.0) as soon as this
+  // category is open for scoring — every candidate, not just the ones a
+  // judge has opened.
+  //
+  // Background: this used to fire per-card, the instant a judge opened a
+  // candidate (PR #16) — the readout showed minScore as a placeholder for
+  // an unscored candidate, so a judge who read that number, agreed with it,
+  // and moved on left NO score saved at all. Seeding on open made "leave it
+  // alone" and "explicitly want the minimum" the same outcome.
+  //
+  // Now the whole panel is seeded up front instead, so a judge only ever
+  // adjusts away from 7.0 rather than establishing a score from nothing.
+  // Consequence worth knowing: categoryProgress and the Submit gate below
+  // count saved rows, so a category reads as complete — and Submit unlocks
+  // — as soon as this runs, before a judge has looked at anyone. They no
+  // longer distinguish "judged" from "untouched"; per-judge submission
+  // status is the only signal that a panel actually scored.
+  //
+  // Guarded per (round, category) so it seeds once per category rather than
+  // re-firing on every render or refetch, and skipped entirely while the
+  // category is locked or scoring isn't open — never write into a category
+  // the API would reject anyway.
+  const seededCategoriesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!data || categoryId == null || locked || scoringBlocked) return;
+    const category = data.categories.find((c) => c.id === categoryId);
+    if (!category) return;
+
+    const seedKey = `${roundId}-${categoryId}`;
+    if (seededCategoriesRef.current.has(seedKey)) return;
+
+    const unscored = data.candidates.filter(
+      (c) =>
+        !c.scores.some(
+          (s) => s.categoryId === categoryId && s.scoreValue != null
+        )
+    );
+    if (unscored.length === 0) return;
+
+    seededCategoriesRef.current.add(seedKey);
+    for (const candidate of unscored) {
+      debouncedSaveScore(
+        candidate.candidateId,
+        categoryId,
+        category.minScore,
+        (err) => {
+          toast.error(extractErrorMessage(err, "Failed to save score"));
+          void reload();
+        }
+      );
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per category once it's open; re-running on every data refetch would fight in-flight edits
+  }, [data, categoryId, locked, scoringBlocked, roundId]);
 
   async function handleSubmit() {
     if (!categoryId) return;
@@ -500,14 +507,20 @@ export default function RoundScoring() {
             }
 
             return (
-              // Left = the candidate being scored, right = the roster. Both
-              // columns are always side by side (no stacking breakpoint) —
-              // this screen is used on a tablet, and the judge needs the
-              // roster visible while scoring so switching candidates is one
-              // tap, never a scroll hunt.
-              <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3 items-start">
+              // Left = the roster (narrower — it's just a picker), right =
+              // the candidate being scored. Always side by side, no
+              // stacking breakpoint: this is a tablet screen, and the
+              // roster has to stay visible so switching candidates is one
+              // tap rather than a scroll hunt.
+              <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,5fr)] gap-3 items-start">
+                {/* Roster — every candidate, tap to load into the scoring
+                    column on the right. */}
+                <div className="space-y-2">
+                  {data.candidates.map(renderRosterCard)}
+                </div>
+
                 {/* Selected candidate + score entry. Sticky so a long
-                    roster scrolling on the right can't push the slider off
+                    roster scrolling on the left can't push the slider off
                     screen. */}
                 <div className="sticky top-3">
                   {selected && selectedCategory ? (
@@ -543,19 +556,12 @@ export default function RoundScoring() {
                               disabled={locked || scoringBlocked}
                               onChange={(v) => void handleScoreChange(selected.candidateId, v)}
                             />
-                            <Button
-                              type="button"
-                              className="w-full mt-4 h-12"
-                              onClick={handleSaveNow}
-                              disabled={locked || scoringBlocked || savingNow}
-                            >
-                              <Save className="size-4" />
-                              {savingNow ? "Saving…" : "Save"}
-                            </Button>
+                            {/* No Save button — every change autosaves on
+                                the existing ~300ms debounce. */}
                             <button
                               type="button"
                               onClick={() => setSelectedCandidateId(null)}
-                              className="w-full mt-2 py-2 text-xs text-muted-foreground hover:text-foreground"
+                              className="w-full mt-4 py-2 text-xs text-muted-foreground hover:text-foreground"
                             >
                               Back to candidate list
                             </button>
@@ -570,12 +576,6 @@ export default function RoundScoring() {
                       </CardContent>
                     </Card>
                   )}
-                </div>
-
-                {/* Roster — every candidate, always visible, tap to load
-                    into the left column. */}
-                <div className="space-y-2">
-                  {data.candidates.map(renderRosterCard)}
                 </div>
               </div>
             );
